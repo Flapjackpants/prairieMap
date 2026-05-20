@@ -14,12 +14,11 @@ import {
   DEFAULT_PALETTE,
   isBlankAssetKey,
   type AssetFrameState,
-  type DrawStroke,
   type FrameAnnotations,
   type FrameDuplicateOptions,
   type FrameInfo,
-  type MapLabel,
   type PaletteColor,
+  type PolygonRing,
   type ProjectExport,
   type ProjectState,
   type ResolvedFrame,
@@ -27,7 +26,9 @@ import {
   type ToolMode,
   type ViewportState,
 } from '../types/project';
-import { cloneAnnotations, cloneFrameInfo } from '../utils/cloneFrameData';
+import { cloneAnnotations, cloneCountry, cloneFrameInfo } from '../utils/cloneFrameData';
+import { applyTerritoryTransfer } from '../utils/polygonOps';
+import { recomputeCountryLabels } from '../utils/territoryGeometry';
 import { importToAssets, stateToExport } from '../utils/exportSchema';
 import {
   cleanupAssetCopies,
@@ -54,17 +55,23 @@ type ProjectAction =
   | { type: 'DUPLICATE_FRAME'; sourceIndex: number; options: FrameDuplicateOptions }
   | { type: 'SET_TOOL'; tool: ToolMode }
   | { type: 'SET_ACTIVE_COLOR'; colorId: string }
-  | { type: 'SET_BRUSH_SIZE'; size: number }
-  | { type: 'SET_BRUSH_OPACITY'; opacity: number }
   | { type: 'TOGGLE_CARRY_LABELS' }
   | { type: 'SET_VIEWPORT'; viewport: ViewportState }
-  | { type: 'ADD_STROKE'; target: AssetTarget; stroke: DrawStroke }
-  | { type: 'UPDATE_LABEL'; target: AssetTarget; label: MapLabel }
-  | { type: 'DELETE_LABEL'; target: AssetTarget; labelId: string }
+  | {
+      type: 'ADD_TERRITORY_REGION';
+      target: AssetTarget;
+      factionId: string;
+      factionName: string;
+      color: string;
+      region: PolygonRing;
+    }
+  | { type: 'DELETE_COUNTRY'; target: AssetTarget; countryId: string }
+  | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
   | { type: 'UPDATE_FRAME_INFO'; target: AssetTarget; info: Partial<FrameInfo> }
   | { type: 'SET_ASSET_STATE'; target: AssetTarget; state: AssetFrameState }
   | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
   | { type: 'UPDATE_PALETTE_COLOR'; color: PaletteColor }
+  | { type: 'UPDATE_FACTION_METADATA'; factionId: string; name?: string; hex?: string }
   | { type: 'REMOVE_PALETTE_COLOR'; colorId: string }
   | { type: 'SET_FILE_CANVAS_SIZE'; filename: string; width: number; height: number }
   | { type: 'CLEAR_PROJECT' };
@@ -78,19 +85,20 @@ const initialState: ProjectState = {
   palette: DEFAULT_PALETTE,
   activeColorId: DEFAULT_PALETTE[0].id,
   tool: 'pan',
-  brushSize: 24,
-  brushOpacity: 0.45,
   carryOverLabels: true,
   viewport: { scale: 1, x: 0, y: 0 },
+  selectedCountryId: null,
 };
 
-function mergeCarriedLabels(
+function mergeCarriedTerritories(
   prev: FrameAnnotations,
   next: FrameAnnotations,
 ): FrameAnnotations {
-  const existingIds = new Set(next.labels.map((l) => l.id));
-  const carried = prev.labels.filter((l) => !existingIds.has(l.id));
-  return { ...next, labels: [...carried, ...next.labels] };
+  const existingFactions = new Set(next.countries.map((c) => c.factionId));
+  const carried = prev.countries
+    .filter((c) => !existingFactions.has(c.factionId))
+    .map((c) => cloneCountry(c));
+  return { countries: [...carried, ...next.countries] };
 }
 
 function updateAssetAt(
@@ -181,7 +189,7 @@ function projectReducer(state: ProjectState, action: ProjectAction): ProjectStat
       if (state.carryOverLabels) {
         const prevData = getAssetState(state.assets, prevEntry.filename, prevEntry.copyIndex);
         const nextData = getAssetState(state.assets, nextEntry.filename, nextEntry.copyIndex);
-        const merged = mergeCarriedLabels(prevData.annotations, nextData.annotations);
+        const merged = mergeCarriedTerritories(prevData.annotations, nextData.annotations);
         const assets = updateAssetAt(
           state.assets,
           { filename: nextEntry.filename, copyIndex: nextEntry.copyIndex },
@@ -321,56 +329,44 @@ function projectReducer(state: ProjectState, action: ProjectAction): ProjectStat
     case 'SET_ACTIVE_COLOR':
       return { ...state, activeColorId: action.colorId };
 
-    case 'SET_BRUSH_SIZE':
-      return { ...state, brushSize: action.size };
-
-    case 'SET_BRUSH_OPACITY':
-      return { ...state, brushOpacity: action.opacity };
-
     case 'TOGGLE_CARRY_LABELS':
       return { ...state, carryOverLabels: !state.carryOverLabels };
 
     case 'SET_VIEWPORT':
       return { ...state, viewport: action.viewport };
 
-    case 'ADD_STROKE':
+    case 'ADD_TERRITORY_REGION':
       return {
         ...state,
         assets: updateAssetAt(state.assets, action.target, (s) => ({
           ...s,
           annotations: {
-            ...s.annotations,
-            strokes: [...s.annotations.strokes, action.stroke],
+            countries: applyTerritoryTransfer(
+              s.annotations.countries,
+              action.region,
+              action.factionId,
+              action.factionName,
+              action.color,
+            ),
           },
         })),
       };
 
-    case 'UPDATE_LABEL': {
-      return {
-        ...state,
-        assets: updateAssetAt(state.assets, action.target, (s) => {
-          const exists = s.annotations.labels.some((l) => l.id === action.label.id);
-          const labels = exists
-            ? s.annotations.labels.map((l) =>
-                l.id === action.label.id ? action.label : l,
-              )
-            : [...s.annotations.labels, action.label];
-          return { ...s, annotations: { ...s.annotations, labels } };
-        }),
-      };
-    }
-
-    case 'DELETE_LABEL':
+    case 'DELETE_COUNTRY':
       return {
         ...state,
         assets: updateAssetAt(state.assets, action.target, (s) => ({
           ...s,
           annotations: {
-            ...s.annotations,
-            labels: s.annotations.labels.filter((l) => l.id !== action.labelId),
+            countries: s.annotations.countries.filter((c) => c.id !== action.countryId),
           },
         })),
+        selectedCountryId:
+          state.selectedCountryId === action.countryId ? null : state.selectedCountryId,
       };
+
+    case 'SET_SELECTED_COUNTRY':
+      return { ...state, selectedCountryId: action.countryId };
 
     case 'UPDATE_FRAME_INFO':
       return {
@@ -401,6 +397,41 @@ function projectReducer(state: ProjectState, action: ProjectAction): ProjectStat
           c.id === action.color.id ? action.color : c,
         ),
       };
+
+    case 'UPDATE_FACTION_METADATA': {
+      const { factionId, name, hex } = action;
+      const paletteEntry = state.palette.find((p) => p.id === factionId);
+      if (!paletteEntry) return state;
+
+      const nextName = name !== undefined ? name : paletteEntry.name;
+      const nextHex = hex !== undefined ? hex : paletteEntry.hex;
+
+      const palette = state.palette.map((p) =>
+        p.id === factionId ? { ...p, name: nextName, hex: nextHex } : p,
+      );
+
+      const assets: Record<string, AssetFrameState[]> = {};
+      for (const [filename, copies] of Object.entries(state.assets)) {
+        assets[filename] = copies.map((copy) => ({
+          ...copy,
+          annotations: {
+            countries: copy.annotations.countries
+              .map((c) =>
+                c.factionId === factionId
+                  ? recomputeCountryLabels({
+                      ...c,
+                      name: nextName.toUpperCase(),
+                      color: nextHex,
+                    })
+                  : c,
+              )
+              .filter((c) => c.regions.length > 0),
+          },
+        }));
+      }
+
+      return { ...state, palette, assets };
+    }
 
     case 'REMOVE_PALETTE_COLOR': {
       const palette = state.palette.filter((c) => c.id !== action.colorId);
@@ -454,15 +485,14 @@ interface ProjectContextValue {
   prevFrame: () => void;
   setTool: (tool: ToolMode) => void;
   setActiveColor: (colorId: string) => void;
-  setBrushSize: (size: number) => void;
-  setBrushOpacity: (opacity: number) => void;
   toggleCarryLabels: () => void;
   setViewport: (viewport: ViewportState) => void;
-  addStroke: (stroke: DrawStroke) => void;
-  updateLabel: (label: MapLabel) => void;
-  deleteLabel: (labelId: string) => void;
+  addTerritoryRegion: (region: PolygonRing) => void;
+  deleteCountry: (countryId: string) => void;
+  setSelectedCountry: (countryId: string | null) => void;
   updateFrameInfo: (info: Partial<FrameInfo>) => void;
   addPaletteColor: (name: string, hex: string) => void;
+  updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => void;
   exportProject: () => ProjectExport;
   importProject: (data: ProjectExport, files: File[]) => void;
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => boolean;
@@ -514,14 +544,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_ACTIVE_COLOR', colorId });
   }, []);
 
-  const setBrushSize = useCallback((size: number) => {
-    dispatch({ type: 'SET_BRUSH_SIZE', size });
-  }, []);
-
-  const setBrushOpacity = useCallback((opacity: number) => {
-    dispatch({ type: 'SET_BRUSH_OPACITY', opacity });
-  }, []);
-
   const toggleCarryLabels = useCallback(() => {
     dispatch({ type: 'TOGGLE_CARRY_LABELS' });
   }, []);
@@ -530,32 +552,35 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_VIEWPORT', viewport });
   }, []);
 
-  const addStroke = useCallback(
-    (stroke: DrawStroke) => {
+  const addTerritoryRegion = useCallback(
+    (region: PolygonRing) => {
+      const target = currentTarget(currentFrame);
+      const faction = activeColor;
+      if (!target || !faction) return;
+      dispatch({
+        type: 'ADD_TERRITORY_REGION',
+        target,
+        factionId: faction.id,
+        factionName: faction.name,
+        color: faction.hex,
+        region,
+      });
+    },
+    [currentFrame, activeColor],
+  );
+
+  const deleteCountry = useCallback(
+    (countryId: string) => {
       const target = currentTarget(currentFrame);
       if (!target) return;
-      dispatch({ type: 'ADD_STROKE', target, stroke });
+      dispatch({ type: 'DELETE_COUNTRY', target, countryId });
     },
     [currentFrame],
   );
 
-  const updateLabel = useCallback(
-    (label: MapLabel) => {
-      const target = currentTarget(currentFrame);
-      if (!target) return;
-      dispatch({ type: 'UPDATE_LABEL', target, label });
-    },
-    [currentFrame],
-  );
-
-  const deleteLabel = useCallback(
-    (labelId: string) => {
-      const target = currentTarget(currentFrame);
-      if (!target) return;
-      dispatch({ type: 'DELETE_LABEL', target, labelId });
-    },
-    [currentFrame],
-  );
+  const setSelectedCountry = useCallback((countryId: string | null) => {
+    dispatch({ type: 'SET_SELECTED_COUNTRY', countryId });
+  }, []);
 
   const updateFrameInfo = useCallback(
     (info: Partial<FrameInfo>) => {
@@ -572,6 +597,13 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       color: { id: uuidv4(), name, hex },
     });
   }, []);
+
+  const updateFactionMetadata = useCallback(
+    (factionId: string, patch: { name?: string; hex?: string }) => {
+      dispatch({ type: 'UPDATE_FACTION_METADATA', factionId, ...patch });
+    },
+    [],
+  );
 
   const exportProject = useCallback((): ProjectExport => {
     return stateToExport(state);
@@ -616,15 +648,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       prevFrame,
       setTool,
       setActiveColor,
-      setBrushSize,
-      setBrushOpacity,
       toggleCarryLabels,
       setViewport,
-      addStroke,
-      updateLabel,
-      deleteLabel,
+      addTerritoryRegion,
+      deleteCountry,
+      setSelectedCountry,
       updateFrameInfo,
       addPaletteColor,
+      updateFactionMetadata,
       exportProject,
       importProject,
       duplicateFrame,
@@ -642,15 +673,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       prevFrame,
       setTool,
       setActiveColor,
-      setBrushSize,
-      setBrushOpacity,
       toggleCarryLabels,
       setViewport,
-      addStroke,
-      updateLabel,
-      deleteLabel,
+      addTerritoryRegion,
+      deleteCountry,
+      setSelectedCountry,
       updateFrameInfo,
       addPaletteColor,
+      updateFactionMetadata,
       exportProject,
       importProject,
       duplicateFrame,

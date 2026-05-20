@@ -2,6 +2,7 @@ import { BookOpen, Plus, Trash2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { useProject } from '../../context/ProjectContext';
 import type { FactionStat } from '../../types/project';
+import { FactionManager } from './FactionManager';
 
 export function InfoBoard() {
   const { state, currentFrame, updateFrameInfo } = useProject();
@@ -141,6 +142,8 @@ export function InfoBoard() {
                 })}
               </ul>
             </section>
+
+            <FactionManager />
           </>
         )}
       </div>

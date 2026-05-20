@@ -1,4 +1,4 @@
-import { Crosshair, Download, FolderOpen, Upload } from 'lucide-react';
+import { Download, FolderOpen, Globe2, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { ProjectExport } from '../../types/project';
@@ -51,7 +51,7 @@ export function Header() {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface-raised px-4">
       <div className="flex items-center gap-2.5">
-        <Crosshair className="h-5 w-5 text-accent-cyan" strokeWidth={2} />
+        <Globe2 className="h-5 w-5 text-accent-cyan" strokeWidth={2} />
         <h1 className="text-lg font-bold tracking-widest text-text-primary uppercase">
           Prairie<span className="text-accent-cyan">Map</span>
         </h1>

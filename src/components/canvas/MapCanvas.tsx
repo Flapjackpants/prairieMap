@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Stage, Layer, Image as KonvaImage, Line, Text, Group, Rect } from 'react-konva';
+import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva';
 import type Konva from 'konva';
-import { v4 as uuidv4 } from 'uuid';
 import { AlertTriangle, Map } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
+import { normalizeClosedRing } from '../../utils/territoryGeometry';
+import { SNAP_THRESHOLD_PX } from '../../types/project';
+import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
-import type { MapLabel, DrawStroke } from '../../types/project';
+import { TerritoryLayer } from './TerritoryLayer';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
+const MIN_POLYGON_POINTS = 3;
 
 function useLoadedImage(url: string | null) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -38,30 +41,30 @@ export function MapCanvas() {
     currentFrame,
     activeColor,
     setViewport,
-    addStroke,
-    updateLabel,
-    deleteLabel,
+    addTerritoryRegion,
+    setSelectedCountry,
     setFileCanvasSize,
+    setTool,
   } = useProject();
 
-  const { tool, brushSize, brushOpacity, viewport } = state;
+  const { tool, viewport, selectedCountryId } = state;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [currentStroke, setCurrentStroke] = useState<DrawStroke | null>(null);
+  const [draftPoints, setDraftPoints] = useState<{ x: number; y: number }[]>([]);
+  const [cursorPoint, setCursorPoint] = useState<{ x: number; y: number } | null>(null);
+  const [snapTarget, setSnapTarget] = useState<SnapVertex | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
-  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
-  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
-  const [editText, setEditText] = useState('');
 
   const image = useLoadedImage(
     currentFrame && !currentFrame.isMissing ? currentFrame.objectUrl : null,
   );
-  const annotations = currentFrame?.frameData.annotations ?? { strokes: [], labels: [] };
+  const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
 
   const isPanMode = tool === 'pan' || spaceHeld;
+  const isAreaSelect = tool === 'areaSelect' && !isPanMode;
+  const snapThreshold = SNAP_THRESHOLD_PX / Math.max(viewport.scale, 0.15);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -75,10 +78,65 @@ export function MapCanvas() {
   }, []);
 
   useEffect(() => {
+    setDraftPoints([]);
+    setCursorPoint(null);
+    setSnapTarget(null);
+  }, [currentFrame?.entry.id]);
+
+  const getPointerOnImage = useCallback(() => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    const pos = stage.getPointerPosition();
+    if (!pos) return null;
+    const transform = stage.getAbsoluteTransform().copy().invert();
+    return transform.point(pos);
+  }, []);
+
+  const resolveSnap = useCallback(
+    (raw: { x: number; y: number }, excludeDraftIndex?: number) => {
+      const verts = collectSnapVertices(countries, draftPoints, excludeDraftIndex);
+      const snap = findSnapTarget(raw, verts, snapThreshold);
+      return snap ? { x: snap.x, y: snap.y, snap } : { x: raw.x, y: raw.y, snap: null as SnapVertex | null };
+    },
+    [countries, draftPoints, snapThreshold],
+  );
+
+  const closeDraftPolygon = useCallback(() => {
+    if (draftPoints.length < MIN_POLYGON_POINTS) {
+      setDraftPoints([]);
+      setCursorPoint(null);
+      return;
+    }
+    const ring = normalizeClosedRing(draftPoints);
+    addTerritoryRegion(ring);
+    setDraftPoints([]);
+    setCursorPoint(null);
+    setSnapTarget(null);
+  }, [draftPoints, addTerritoryRegion]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && !editingLabelId) {
+      if (e.code === 'Space') {
         e.preventDefault();
         setSpaceHeld(true);
+        return;
+      }
+      if (tool !== 'areaSelect' || !currentFrame) return;
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        closeDraftPolygon();
+        return;
+      }
+      if (e.key === 'Escape') {
+        setDraftPoints([]);
+        setCursorPoint(null);
+        setSnapTarget(null);
+        return;
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault();
+        setDraftPoints((pts) => pts.slice(0, -1));
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -90,16 +148,7 @@ export function MapCanvas() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [editingLabelId]);
-
-  const getPointerOnImage = useCallback(() => {
-    const stage = stageRef.current;
-    if (!stage) return null;
-    const pos = stage.getPointerPosition();
-    if (!pos) return null;
-    const transform = stage.getAbsoluteTransform().copy().invert();
-    return transform.point(pos);
-  }, []);
+  }, [tool, currentFrame, closeDraftPolygon]);
 
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -132,55 +181,46 @@ export function MapCanvas() {
     [viewport, setViewport],
   );
 
-  const handleStageMouseDown = () => {
-    const point = getPointerOnImage();
-    if (!point || !activeColor) return;
-
-    if (tool === 'text') {
-      const label: MapLabel = {
-        id: uuidv4(),
-        x: point.x,
-        y: point.y,
-        text: 'Label',
-        fontSize: 18,
-        color: activeColor.hex,
-      };
-      updateLabel(label);
-      setSelectedLabelId(label.id);
-      setEditingLabelId(label.id);
-      setEditText(label.text);
+  const handleStageMouseMove = () => {
+    if (!isAreaSelect) {
+      setCursorPoint(null);
+      setSnapTarget(null);
       return;
     }
-
-    if (tool === 'brush' && !isPanMode) {
-      setIsDrawing(true);
-      const stroke: DrawStroke = {
-        id: uuidv4(),
-        points: [{ x: point.x, y: point.y }],
-        color: activeColor.hex,
-        size: brushSize,
-        opacity: brushOpacity,
-      };
-      setCurrentStroke(stroke);
-    }
+    const raw = getPointerOnImage();
+    if (!raw) return;
+    const { x, y, snap } = resolveSnap(raw);
+    setCursorPoint({ x, y });
+    setSnapTarget(snap);
   };
 
-  const handleStageMouseMove = () => {
-    if (!isDrawing || !currentStroke || tool !== 'brush') return;
-    const point = getPointerOnImage();
-    if (!point) return;
-    setCurrentStroke({
-      ...currentStroke,
-      points: [...currentStroke.points, { x: point.x, y: point.y }],
-    });
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (!isAreaSelect || !activeColor) return;
+
+    const raw = getPointerOnImage();
+    if (!raw) return;
+
+    if (e.evt.altKey) {
+      const draftHit = draftPoints.findIndex(
+        (p) => Math.hypot(p.x - raw.x, p.y - raw.y) <= snapThreshold,
+      );
+      if (draftHit >= 0) {
+        setDraftPoints((pts) => pts.filter((_, i) => i !== draftHit));
+        return;
+      }
+    }
+
+    const { x, y } = resolveSnap(raw);
+    setDraftPoints((pts) => [...pts, { x, y }]);
   };
 
-  const handleStageMouseUp = () => {
-    if (isDrawing && currentStroke) {
-      addStroke(currentStroke);
-      setCurrentStroke(null);
-    }
-    setIsDrawing(false);
+  const handleStageDblClick = () => {
+    if (!isAreaSelect) return;
+    closeDraftPolygon();
+  };
+
+  const removeDraftAnchor = (index: number) => {
+    setDraftPoints((pts) => pts.filter((_, i) => i !== index));
   };
 
   const fitToView = useCallback(() => {
@@ -205,9 +245,7 @@ export function MapCanvas() {
 
   useEffect(() => {
     if (image && currentFrame && !currentFrame.isBlank && !currentFrame.isMissing) {
-      if (!currentFrame.isBlank) {
-        setFileCanvasSize(currentFrame.filename, image.width, image.height);
-      }
+      setFileCanvasSize(currentFrame.filename, image.width, image.height);
     }
   }, [image, currentFrame, setFileCanvasSize]);
 
@@ -234,6 +272,16 @@ export function MapCanvas() {
   useEffect(() => {
     if (currentFrame && !image) fitBlankToView();
   }, [currentFrame?.entry.id, image, fitBlankToView]);
+
+  const cursor = isPanMode
+    ? 'grab'
+    : isAreaSelect
+      ? snapTarget
+        ? 'cell'
+        : 'crosshair'
+      : tool === 'select'
+        ? 'pointer'
+        : 'default';
 
   return (
     <main className="panel flex min-w-0 flex-col border-x-0">
@@ -291,10 +339,9 @@ export function MapCanvas() {
               scaleX={viewport.scale}
               scaleY={viewport.scale}
               onWheel={handleWheel}
-              onMouseDown={handleStageMouseDown}
-              onMousemove={handleStageMouseMove}
-              onMouseup={handleStageMouseUp}
-              onMouseleave={handleStageMouseUp}
+              onMouseMove={handleStageMouseMove}
+              onClick={handleStageClick}
+              onDblClick={handleStageDblClick}
               onDragEnd={(e) => {
                 if (isPanMode) {
                   setViewport({
@@ -304,11 +351,16 @@ export function MapCanvas() {
                   });
                 }
               }}
-              style={{ cursor: isPanMode ? 'grab' : tool === 'brush' ? 'crosshair' : 'default' }}
+              style={{ cursor }}
             >
               <Layer>
                 {image ? (
-                  <KonvaImage image={image} width={canvasWidth} height={canvasHeight} listening={false} />
+                  <KonvaImage
+                    image={image}
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    listening={false}
+                  />
                 ) : (
                   <>
                     <Rect
@@ -328,91 +380,21 @@ export function MapCanvas() {
                   </>
                 )}
 
-                {annotations.strokes.map((stroke) => (
-                  <Line
-                    key={stroke.id}
-                    points={stroke.points.flatMap((p) => [p.x, p.y])}
-                    stroke={stroke.color}
-                    strokeWidth={stroke.size}
-                    opacity={stroke.opacity}
-                    lineCap="round"
-                    lineJoin="round"
-                    tension={0.3}
-                    globalCompositeOperation="source-over"
-                  />
-                ))}
-
-                {currentStroke && (
-                  <Line
-                    points={currentStroke.points.flatMap((p) => [p.x, p.y])}
-                    stroke={currentStroke.color}
-                    strokeWidth={currentStroke.size}
-                    opacity={currentStroke.opacity}
-                    lineCap="round"
-                    lineJoin="round"
-                    tension={0.3}
-                  />
-                )}
-
-                {annotations.labels.map((label) => (
-                  <Group
-                    key={label.id}
-                    x={label.x}
-                    y={label.y}
-                    draggable={tool === 'select' || tool === 'text'}
-                    onClick={() => setSelectedLabelId(label.id)}
-                    onDblClick={() => {
-                      setEditingLabelId(label.id);
-                      setEditText(label.text);
-                    }}
-                    onDragEnd={(e) => {
-                      updateLabel({
-                        ...label,
-                        x: e.target.x(),
-                        y: e.target.y(),
-                      });
-                    }}
-                  >
-                    <Rect
-                      width={(label.text.length + 2) * (label.fontSize * 0.55)}
-                      height={label.fontSize + 8}
-                      fill="rgba(18,18,20,0.75)"
-                      stroke={selectedLabelId === label.id ? '#00e5ff' : label.color}
-                      strokeWidth={selectedLabelId === label.id ? 2 : 1}
-                      cornerRadius={2}
-                    />
-                    <Text
-                      text={label.text}
-                      fontSize={label.fontSize}
-                      fill={label.color}
-                      fontFamily="Rajdhani, sans-serif"
-                      fontStyle="bold"
-                      padding={4}
-                    />
-                  </Group>
-                ))}
+                <TerritoryLayer
+                  countries={countries}
+                  selectedCountryId={selectedCountryId}
+                  draftPoints={draftPoints}
+                  draftColor={activeColor?.hex ?? '#00e5ff'}
+                  cursorPoint={cursorPoint}
+                  snapTarget={snapTarget}
+                  onSelectCountry={(id) => {
+                    setSelectedCountry(id);
+                    setTool('select');
+                  }}
+                  onRemoveDraftAnchor={removeDraftAnchor}
+                />
               </Layer>
             </Stage>
-
-            {editingLabelId && (
-              <LabelEditor
-                label={annotations.labels.find((l) => l.id === editingLabelId)!}
-                editText={editText}
-                viewport={viewport}
-                onChange={setEditText}
-                onSave={() => {
-                  const label = annotations.labels.find((l) => l.id === editingLabelId);
-                  if (label) updateLabel({ ...label, text: editText });
-                  setEditingLabelId(null);
-                }}
-                onCancel={() => setEditingLabelId(null)}
-                onDelete={() => {
-                  deleteLabel(editingLabelId);
-                  setEditingLabelId(null);
-                  setSelectedLabelId(null);
-                }}
-              />
-            )}
           </>
         )}
 
@@ -428,52 +410,5 @@ export function MapCanvas() {
 
       <PlaybackControls />
     </main>
-  );
-}
-
-function LabelEditor({
-  label,
-  editText,
-  viewport,
-  onChange,
-  onSave,
-  onCancel,
-  onDelete,
-}: {
-  label: MapLabel;
-  editText: string;
-  viewport: { scale: number; x: number; y: number };
-  onChange: (t: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
-}) {
-  const screenX = label.x * viewport.scale + viewport.x;
-  const screenY = label.y * viewport.scale + viewport.y;
-
-  return (
-    <div
-      className="absolute z-30 flex flex-col gap-1 rounded border border-accent-cyan/50 bg-surface-raised p-2 shadow-lg"
-      style={{ left: screenX, top: screenY }}
-    >
-      <input
-        className="input-field min-w-[160px]"
-        value={editText}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') onSave();
-          if (e.key === 'Escape') onCancel();
-        }}
-        autoFocus
-      />
-      <div className="flex gap-1">
-        <button type="button" className="btn-primary flex-1 text-xs" onClick={onSave}>
-          Save
-        </button>
-        <button type="button" className="btn-icon text-xs text-accent-crimson" onClick={onDelete}>
-          Del
-        </button>
-      </div>
-    </div>
   );
 }

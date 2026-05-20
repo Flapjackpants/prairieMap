@@ -1,4 +1,4 @@
-export type ToolMode = 'pan' | 'brush' | 'bucket' | 'text' | 'select';
+export type ToolMode = 'pan' | 'areaSelect' | 'select';
 
 export interface PaletteColor {
   id: string;
@@ -6,27 +6,36 @@ export interface PaletteColor {
   hex: string;
 }
 
-export interface StrokePoint {
-  x: number;
-  y: number;
-}
+/** Closed polygon as [x, y] pairs in image space */
+export type PolygonRing = [number, number][];
 
-export interface DrawStroke {
-  id: string;
-  points: StrokePoint[];
-  color: string;
-  size: number;
-  opacity: number;
-}
-
-export interface MapLabel {
-  id: string;
-  x: number;
-  y: number;
-  text: string;
+export interface CountryLabelSettings {
   fontSize: number;
+  rotation: number;
+  letterSpacing: number;
+}
+
+/** Flat label placement for one disconnected region (exclave). */
+export interface RegionLabelPlacement {
+  x: number;
+  y: number;
+  fontSize: number;
+  letterSpacing: number;
+}
+
+export interface CountryTerritory {
+  id: string;
+  factionId: string;
+  name: string;
   color: string;
-  width?: number;
+  labelSettings: CountryLabelSettings;
+  /** One label per region ring (exclaves after union). */
+  regionLabels: RegionLabelPlacement[];
+  regions: PolygonRing[];
+}
+
+export interface TerritoryDrawings {
+  countries: CountryTerritory[];
 }
 
 export interface FactionStat {
@@ -43,8 +52,7 @@ export interface FrameInfo {
 }
 
 export interface FrameAnnotations {
-  strokes: DrawStroke[];
-  labels: MapLabel[];
+  countries: CountryTerritory[];
 }
 
 /** Per-copy editable state stored in assets[filename][copyIndex] */
@@ -93,8 +101,10 @@ export const DEFAULT_DUPLICATE_OPTIONS: FrameDuplicateOptions = {
 };
 
 export const DEFAULT_CANVAS_SIZE = { width: 1920, height: 1080 } as const;
+export const TERRITORY_FILL_OPACITY = 0.4;
+export const TERRITORY_OUTLINE_WIDTH = 1.5;
+export const SNAP_THRESHOLD_PX = 14;
 
-/** Synthetic asset key for blank-canvas copies (no map image). */
 export const BLANK_ASSET_PREFIX = '__blank__/';
 
 export function isBlankAssetKey(filename: string): boolean {
@@ -120,13 +130,11 @@ export interface ProjectState {
   palette: PaletteColor[];
   activeColorId: string;
   tool: ToolMode;
-  brushSize: number;
-  brushOpacity: number;
   carryOverLabels: boolean;
   viewport: ViewportState;
+  selectedCountryId: string | null;
 }
 
-/** Serialized project (v2) */
 export interface ProjectExportV2 {
   version: 2;
   projectName: string;
@@ -136,8 +144,7 @@ export interface ProjectExportV2 {
   assets: Record<
     string,
     {
-      drawings: DrawStroke[];
-      labels: MapLabel[];
+      drawings: TerritoryDrawings | LegacyDrawingsExport;
       infoBoard: {
         date: string;
         text: string;
@@ -148,7 +155,13 @@ export interface ProjectExportV2 {
   timeline: TimelineEntry[];
 }
 
-/** Legacy v1 export for migration */
+/** Legacy stroke/label export shape */
+export interface LegacyDrawingsExport {
+  countries?: CountryTerritory[];
+  strokes?: unknown[];
+  labels?: unknown[];
+}
+
 export interface ProjectExportV1 {
   version: 1;
   exportedAt: string;
@@ -164,10 +177,10 @@ export interface ProjectExportV1 {
 export type ProjectExport = ProjectExportV2 | ProjectExportV1;
 
 export const DEFAULT_PALETTE: PaletteColor[] = [
-  { id: 'crimson', name: 'Crimson Legion', hex: '#ff2d55' },
-  { id: 'blue', name: 'Electric Coalition', hex: '#448aff' },
-  { id: 'emerald', name: 'Emerald Front', hex: '#00e676' },
-  { id: 'amber', name: 'Amber Dominion', hex: '#ffc400' },
+  { id: 'crimson', name: 'nation1', hex: '#ff2d55' },
+  { id: 'blue', name: 'nation2', hex: '#448aff' },
+  { id: 'emerald', name: 'nation3', hex: '#00e676' },
+  { id: 'amber', name: 'nation4', hex: '#ffc400' },
 ];
 
 export function createEmptyFrameInfo(): FrameInfo {
@@ -179,10 +192,7 @@ export function createEmptyFrameInfo(): FrameInfo {
 }
 
 export function createEmptyAnnotations(): FrameAnnotations {
-  return {
-    strokes: [],
-    labels: [],
-  };
+  return { countries: [] };
 }
 
 export function createEmptyAssetState(): AssetFrameState {

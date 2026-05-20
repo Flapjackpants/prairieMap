@@ -1,18 +1,35 @@
 import type {
   AssetFrameState,
+  CountryTerritory,
+  FrameAnnotations,
+  LegacyDrawingsExport,
   ProjectExport,
   ProjectExportV1,
   ProjectExportV2,
   ProjectState,
+  TerritoryDrawings,
   TimelineEntry,
 } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { createEmptyAssetState } from '../types/project';
+import { recomputeCountryLabels } from './territoryGeometry';
+
+function normalizeCountry(country: CountryTerritory): CountryTerritory {
+  if (!country.regionLabels?.length && country.regions.length > 0) {
+    return recomputeCountryLabels({
+      ...country,
+      regionLabels: country.regionLabels ?? [],
+    });
+  }
+  if (!country.regionLabels) {
+    return { ...country, regionLabels: [] };
+  }
+  return country;
+}
 
 function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][string][number] {
   return {
-    drawings: state.annotations.strokes,
-    labels: state.annotations.labels,
+    drawings: { countries: state.annotations.countries },
     infoBoard: {
       date: state.info.dateTitle,
       text: state.info.description,
@@ -21,12 +38,19 @@ function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][s
   };
 }
 
+function normalizeDrawings(drawings: TerritoryDrawings | LegacyDrawingsExport): FrameAnnotations {
+  if (drawings && 'countries' in drawings && Array.isArray(drawings.countries)) {
+    return {
+      countries: (drawings.countries as CountryTerritory[]).map(normalizeCountry),
+    };
+  }
+  return { countries: [] };
+}
+
 function exportToAssetState(entry: ProjectExportV2['assets'][string][number]): AssetFrameState {
+  const drawings = entry.drawings;
   return {
-    annotations: {
-      strokes: entry.drawings ?? [],
-      labels: entry.labels ?? [],
-    },
+    annotations: normalizeDrawings(drawings),
     info: {
       dateTitle: entry.infoBoard?.date ?? '',
       description: entry.infoBoard?.text ?? '',
@@ -60,7 +84,6 @@ export function isV1Export(data: ProjectExport): data is ProjectExportV1 {
   return data.version === 1;
 }
 
-/** Convert v1 flat frames list into assets + timeline. */
 export function migrateV1ToAssets(data: ProjectExportV1): {
   assets: Record<string, AssetFrameState[]>;
   timeline: TimelineEntry[];
@@ -70,7 +93,11 @@ export function migrateV1ToAssets(data: ProjectExportV1): {
 
   for (const frame of data.frames) {
     const state: AssetFrameState = {
-      annotations: frame.annotations,
+      annotations: {
+        countries: (frame.annotations?.countries ?? []).map((c) =>
+          normalizeCountry({ ...c, regionLabels: c.regionLabels ?? [] }),
+        ),
+      },
       info: frame.info,
     };
     if (!assets[frame.filename]) assets[frame.filename] = [];

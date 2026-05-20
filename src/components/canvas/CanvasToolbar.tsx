@@ -1,38 +1,69 @@
-import {
-  Hand,
-  Paintbrush,
-  PaintBucket,
-  Type,
-  MousePointer2,
-  Link2,
-  Plus,
-} from 'lucide-react';
+import { Hand, Hexagon, Link2, MousePointer2, Plus, Trash2 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
 
 const TOOLS: { id: ToolMode; icon: typeof Hand; label: string }[] = [
   { id: 'pan', icon: Hand, label: 'Pan (Space + drag)' },
-  { id: 'brush', icon: Paintbrush, label: 'Brush' },
-  { id: 'bucket', icon: PaintBucket, label: 'Fill' },
-  { id: 'text', icon: Type, label: 'Text label' },
-  { id: 'select', icon: MousePointer2, label: 'Select' },
+  { id: 'areaSelect', icon: Hexagon, label: 'Area select — click anchors, Enter to close' },
+  { id: 'select', icon: MousePointer2, label: 'Select territory' },
 ];
 
 export function CanvasToolbar() {
   const {
     state,
     setTool,
-    setBrushSize,
-    setBrushOpacity,
     setActiveColor,
     toggleCarryLabels,
     addPaletteColor,
+    deleteCountry,
+    setSelectedCountry,
   } = useProject();
-  const { tool, brushSize, brushOpacity, palette, activeColorId, carryOverLabels } = state;
+  const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
+  const activeFaction = palette.find((c) => c.id === activeColorId);
 
   return (
     <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-2">
-      <div className="flex items-center gap-1 rounded-lg border border-border bg-surface-raised/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+      <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-border bg-surface-raised/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+        <span className="font-mono text-[10px] tracking-wider text-text-muted uppercase">
+          Faction
+        </span>
+        <div className="flex items-center gap-1.5">
+          {palette.map((color) => (
+            <button
+              key={color.id}
+              type="button"
+              title={color.name}
+              onClick={() => {
+                setActiveColor(color.id);
+                if (tool === 'pan') setTool('areaSelect');
+              }}
+              className={`h-8 min-w-[2rem] rounded-full border-2 px-2 text-[10px] font-bold transition-transform hover:scale-105 ${
+                activeColorId === color.id
+                  ? 'border-white scale-105 ring-2 ring-accent-cyan/50'
+                  : 'border-border'
+              }`}
+              style={{ backgroundColor: color.hex, color: '#fff', textShadow: '0 1px 2px #000' }}
+            >
+              {color.name.slice(0, 2).toUpperCase()}
+            </button>
+          ))}
+          <button
+            type="button"
+            title="Add faction"
+            className="btn-icon h-8 w-8"
+            onClick={() => {
+              const name = prompt('Faction / country name:', 'New Nation');
+              if (!name) return;
+              const hex = prompt('Color hex:', '#448aff');
+              if (hex) addPaletteColor(name, hex);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        <div className="mx-1 hidden h-8 w-px bg-border sm:block" />
+
         {TOOLS.map(({ id, icon: Icon, label }) => (
           <button
             key={id}
@@ -44,81 +75,40 @@ export function CanvasToolbar() {
             <Icon className="h-4 w-4" />
           </button>
         ))}
+
         <div className="mx-1 h-6 w-px bg-border" />
+
         <button
           type="button"
-          title={carryOverLabels ? 'Labels carry to next frames' : 'Labels do not carry'}
+          title={carryOverLabels ? 'Territories carry to next frames' : 'Territories do not carry'}
           onClick={toggleCarryLabels}
           className={`btn-icon ${carryOverLabels ? 'btn-icon-active' : ''}`}
         >
           <Link2 className="h-4 w-4" />
         </button>
+
+        {selectedCountryId && (
+          <button
+            type="button"
+            title="Delete selected territory"
+            className="btn-icon hover:border-accent-crimson/60 hover:bg-accent-crimson/10 hover:text-accent-crimson"
+            onClick={() => {
+              if (confirm('Delete this country and all its regions?')) {
+                deleteCountry(selectedCountryId);
+                setSelectedCountry(null);
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
-      {(tool === 'brush' || tool === 'bucket') && (
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-raised/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-          {tool === 'brush' && (
-            <>
-              <label className="flex items-center gap-2 text-xs text-text-muted">
-                Size
-                <input
-                  type="range"
-                  min={4}
-                  max={80}
-                  value={brushSize}
-                  onChange={(e) => setBrushSize(Number(e.target.value))}
-                  className="w-20 accent-accent-cyan"
-                />
-                <span className="w-6 font-mono text-accent-cyan">{brushSize}</span>
-              </label>
-              <label className="flex items-center gap-2 text-xs text-text-muted">
-                Opacity
-                <input
-                  type="range"
-                  min={0.1}
-                  max={1}
-                  step={0.05}
-                  value={brushOpacity}
-                  onChange={(e) => setBrushOpacity(Number(e.target.value))}
-                  className="w-20 accent-accent-cyan"
-                />
-                <span className="w-8 font-mono text-accent-cyan">
-                  {Math.round(brushOpacity * 100)}%
-                </span>
-              </label>
-            </>
-          )}
-
-          <div className="flex items-center gap-1.5">
-            {palette.map((color) => (
-              <button
-                key={color.id}
-                type="button"
-                title={color.name}
-                onClick={() => setActiveColor(color.id)}
-                className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
-                  activeColorId === color.id
-                    ? 'border-white scale-110 ring-2 ring-accent-cyan/50'
-                    : 'border-border'
-                }`}
-                style={{ backgroundColor: color.hex }}
-              />
-            ))}
-            <button
-              type="button"
-              title="Add faction color"
-              className="btn-icon h-7 w-7"
-              onClick={() => {
-                const name = prompt('Faction name:', 'New Faction');
-                if (!name) return;
-                const hex = prompt('Color hex:', '#00e5ff');
-                if (hex) addPaletteColor(name, hex);
-              }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
+      {tool === 'areaSelect' && activeFaction && (
+        <p className="rounded border border-accent-cyan/30 bg-surface-raised/95 px-3 py-1.5 text-center text-xs text-accent-cyan shadow-lg backdrop-blur-sm">
+          Drawing for <strong>{activeFaction.name.toUpperCase()}</strong> — click anchors (snaps to
+          borders), Enter to close, Alt+click to remove anchor, overlaps transfer territory
+        </p>
       )}
     </div>
   );

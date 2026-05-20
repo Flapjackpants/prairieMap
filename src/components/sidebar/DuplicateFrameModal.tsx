@@ -26,8 +26,8 @@ const OPTIONS: {
   },
   {
     key: 'duplicateAnnotations',
-    label: 'Duplicate canvas drawings & labels',
-    description: 'Copy strokes and text as independent, editable layers.',
+    label: 'Duplicate territories & labels',
+    description: 'Copy country regions and auto-fitted labels as independent data.',
     icon: Layers,
   },
   {

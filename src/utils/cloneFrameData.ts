@@ -1,38 +1,29 @@
 import { v4 as uuidv4 } from 'uuid';
 import type {
   AssetFrameState,
-  DrawStroke,
+  CountryTerritory,
   FactionStat,
   FrameAnnotations,
   FrameInfo,
-  MapLabel,
-  StrokePoint,
+  PolygonRing,
 } from '../types/project';
+import { recomputeCountryLabels } from './territoryGeometry';
 
-function clonePoint(p: StrokePoint): StrokePoint {
-  return { x: p.x, y: p.y };
+function cloneRing(ring: PolygonRing): PolygonRing {
+  return ring.map(([x, y]) => [x, y] as [number, number]);
 }
 
-function cloneStroke(stroke: DrawStroke): DrawStroke {
-  return {
+export function cloneCountry(country: CountryTerritory): CountryTerritory {
+  const cloned: CountryTerritory = {
     id: uuidv4(),
-    color: stroke.color,
-    size: stroke.size,
-    opacity: stroke.opacity,
-    points: stroke.points.map(clonePoint),
+    factionId: country.factionId,
+    name: country.name,
+    color: country.color,
+    labelSettings: { ...country.labelSettings },
+    regionLabels: country.regionLabels.map((l) => ({ ...l })),
+    regions: country.regions.map(cloneRing),
   };
-}
-
-function cloneLabel(label: MapLabel): MapLabel {
-  return {
-    id: uuidv4(),
-    x: label.x,
-    y: label.y,
-    text: label.text,
-    fontSize: label.fontSize,
-    color: label.color,
-    ...(label.width !== undefined ? { width: label.width } : {}),
-  };
+  return recomputeCountryLabels(cloned);
 }
 
 function cloneFactionStat(stat: FactionStat): FactionStat {
@@ -44,15 +35,12 @@ function cloneFactionStat(stat: FactionStat): FactionStat {
   };
 }
 
-/** Deep-clone annotations with new IDs so edits never alias the source frame. */
 export function cloneAnnotations(source: FrameAnnotations): FrameAnnotations {
   return {
-    strokes: source.strokes.map(cloneStroke),
-    labels: source.labels.map(cloneLabel),
+    countries: source.countries.map(cloneCountry),
   };
 }
 
-/** Deep-clone info board data with new stat IDs. */
 export function cloneFrameInfo(source: FrameInfo): FrameInfo {
   return {
     dateTitle: source.dateTitle,
