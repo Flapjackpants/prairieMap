@@ -10,11 +10,11 @@ import { useProject } from '../../context/ProjectContext';
 import { usePlayback } from '../../hooks/usePlayback';
 
 export function PlaybackControls() {
-  const { state, setFrameIndex, nextFrame, prevFrame } = useProject();
-  const { frames, currentFrameIndex } = state;
+  const { state, setTimelineIndex, nextFrame, prevFrame } = useProject();
+  const { timeline, currentTimelineIndex } = state;
   const { isPlaying, canPlay, togglePlay, goToStart, goToEnd } = usePlayback();
 
-  const hasFrames = frames.length > 0;
+  const hasFrames = timeline.length > 0;
 
   return (
     <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-surface-raised px-4 py-2.5">
@@ -30,7 +30,7 @@ export function PlaybackControls() {
       <button
         type="button"
         className="btn-icon"
-        disabled={!hasFrames || currentFrameIndex === 0}
+        disabled={!hasFrames || currentTimelineIndex === 0}
         onClick={prevFrame}
         title="Previous frame"
       >
@@ -48,7 +48,7 @@ export function PlaybackControls() {
       <button
         type="button"
         className="btn-icon"
-        disabled={!hasFrames || currentFrameIndex >= frames.length - 1}
+        disabled={!hasFrames || currentTimelineIndex >= timeline.length - 1}
         onClick={nextFrame}
         title="Next frame"
       >
@@ -68,14 +68,14 @@ export function PlaybackControls() {
         <input
           type="range"
           min={0}
-          max={Math.max(0, frames.length - 1)}
-          value={currentFrameIndex}
+          max={Math.max(0, timeline.length - 1)}
+          value={currentTimelineIndex}
           disabled={!hasFrames}
-          onChange={(e) => setFrameIndex(Number(e.target.value))}
+          onChange={(e) => setTimelineIndex(Number(e.target.value))}
           className="flex-1 accent-accent-cyan disabled:opacity-40"
         />
         <span className="font-mono text-xs text-text-muted whitespace-nowrap">
-          {hasFrames ? `${currentFrameIndex + 1} / ${frames.length}` : 'No frames'}
+          {hasFrames ? `${currentTimelineIndex + 1} / ${timeline.length}` : 'No frames'}
         </span>
       </div>
     </div>

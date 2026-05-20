@@ -4,13 +4,13 @@ import { useProject } from '../context/ProjectContext';
 const DEFAULT_INTERVAL_MS = 2000;
 
 export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
-  const { state, setFrameIndex, nextFrame } = useProject();
+  const { state, setTimelineIndex, nextFrame } = useProject();
   const [isPlaying, setIsPlaying] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const frameCount = state.frames.length;
+  const frameCount = state.timeline.length;
   const canPlay = frameCount > 1;
-  const isAtEnd = state.currentFrameIndex >= frameCount - 1;
+  const isAtEnd = state.currentTimelineIndex >= frameCount - 1;
 
   const play = useCallback(() => {
     if (!canPlay) return;
@@ -36,7 +36,7 @@ export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
     }
 
     intervalRef.current = setInterval(() => {
-      if (state.currentFrameIndex >= frameCount - 1) {
+      if (state.currentTimelineIndex >= frameCount - 1) {
         setIsPlaying(false);
         return;
       }
@@ -46,7 +46,7 @@ export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isPlaying, canPlay, frameCount, intervalMs, nextFrame, state.currentFrameIndex]);
+  }, [isPlaying, canPlay, frameCount, intervalMs, nextFrame, state.currentTimelineIndex]);
 
   return {
     isPlaying,
@@ -55,7 +55,7 @@ export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
     play,
     pause,
     togglePlay,
-    goToStart: () => setFrameIndex(0),
-    goToEnd: () => setFrameIndex(frameCount - 1),
+    goToStart: () => setTimelineIndex(0),
+    goToEnd: () => setTimelineIndex(frameCount - 1),
   };
 }

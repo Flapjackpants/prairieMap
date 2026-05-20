@@ -21,7 +21,11 @@ Open the dev server URL, click **Load Folder**, and select a directory of map im
 ## Features (current)
 
 - 3-panel layout: timeline, map canvas, intel board
-- Folder import with thumbnail timeline
+- **Assets + timeline** data model: multiple copies per filename, independent timeline order
+- Folder import with smart reconciliation (new files auto-append; missing assets show placeholders)
+- Drag-and-drop timeline reordering
+- Duplicate frame (map / drawings / info board toggles)
+- Delete frame with orphan asset cleanup
 - Pan & zoom (mouse wheel, drag, or hold **Space** + drag)
 - Brush tool with size and opacity
 - Text labels (click to place, double-click to edit, drag to move)
@@ -29,7 +33,7 @@ Open the dev server URL, click **Load Folder**, and select a directory of map im
 - Faction color palette
 - Per-frame date, markdown notes, and faction stats
 - Playback controls (play/pause, scrubber)
-- Export / import project JSON
+- Export / import project JSON (v2 schema; v1 auto-migrated)
 
 ## Project structure
 
@@ -39,11 +43,28 @@ src/
 │   ├── canvas/       MapCanvas, CanvasToolbar, PlaybackControls
 │   ├── infoboard/    InfoBoard
 │   ├── layout/       AppLayout, Header
-│   └── sidebar/      FrameSidebar
-├── context/          ProjectContext (global state)
+│   └── sidebar/      FrameSidebar, DuplicateFrameModal
+├── context/          ProjectContext (assets + timeline state)
 ├── hooks/            usePlayback
 ├── types/            project.ts
-└── utils/            sortFiles.ts
+└── utils/            sortFiles, cloneFrameData, exportSchema, reconcileFolder, projectHelpers
+```
+
+### JSON export schema (v2)
+
+```json
+{
+  "version": 2,
+  "projectName": "Strategic_Campaign",
+  "assets": {
+    "europe_1939.png": [
+      { "drawings": [], "labels": [], "infoBoard": { "date": "", "text": "", "factionStats": [] } }
+    ]
+  },
+  "timeline": [
+    { "id": "uuid", "filename": "europe_1939.png", "copyIndex": 0 }
+  ]
+}
 ```
 
 ## Scripts

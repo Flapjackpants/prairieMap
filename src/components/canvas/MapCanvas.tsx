@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Line, Text, Group, Rect } from 'react-konva';
 import type Konva from 'konva';
 import { v4 as uuidv4 } from 'uuid';
-import { Map } from 'lucide-react';
+import { AlertTriangle, Map } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
+import { displayFilename } from '../../utils/projectHelpers';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import type { MapLabel, DrawStroke } from '../../types/project';
@@ -35,12 +36,12 @@ export function MapCanvas() {
   const {
     state,
     currentFrame,
-    currentFrameData,
     activeColor,
     setViewport,
     addStroke,
     updateLabel,
     deleteLabel,
+    setFileCanvasSize,
   } = useProject();
 
   const { tool, brushSize, brushOpacity, viewport } = state;
@@ -54,8 +55,11 @@ export function MapCanvas() {
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
-  const image = useLoadedImage(currentFrame?.objectUrl ?? null);
-  const annotations = currentFrameData?.annotations ?? { strokes: [], labels: [] };
+  const image = useLoadedImage(
+    currentFrame && !currentFrame.isMissing ? currentFrame.objectUrl : null,
+  );
+  const annotations = currentFrame?.frameData.annotations ?? { strokes: [], labels: [] };
+  const isMissing = currentFrame?.isMissing ?? false;
 
   const isPanMode = tool === 'pan' || spaceHeld;
 
@@ -197,10 +201,39 @@ export function MapCanvas() {
 
   useEffect(() => {
     if (image) fitToView();
-  }, [image, currentFrame?.id, fitToView]);
+  }, [image, currentFrame?.entry.id, fitToView]);
 
-  const imageWidth = image?.width ?? 0;
-  const imageHeight = image?.height ?? 0;
+  useEffect(() => {
+    if (image && currentFrame && !currentFrame.isBlank && !currentFrame.isMissing) {
+      if (!currentFrame.isBlank) {
+        setFileCanvasSize(currentFrame.filename, image.width, image.height);
+      }
+    }
+  }, [image, currentFrame, setFileCanvasSize]);
+
+  const canvasWidth = image?.width ?? currentFrame?.canvasWidth ?? 1920;
+  const canvasHeight = image?.height ?? currentFrame?.canvasHeight ?? 1080;
+  const hasCanvas = Boolean(currentFrame);
+
+  const fitBlankToView = useCallback(() => {
+    if (!containerRef.current) return;
+    const { width: cw, height: ch } = containerRef.current.getBoundingClientRect();
+    const padding = 40;
+    const scale = Math.min(
+      (cw - padding) / canvasWidth,
+      (ch - padding) / canvasHeight,
+      1,
+    );
+    setViewport({
+      scale,
+      x: (cw - canvasWidth * scale) / 2,
+      y: (ch - canvasHeight * scale) / 2,
+    });
+  }, [canvasWidth, canvasHeight, setViewport]);
+
+  useEffect(() => {
+    if (currentFrame && !image) fitBlankToView();
+  }, [currentFrame?.entry.id, image, fitBlankToView]);
 
   return (
     <main className="panel flex min-w-0 flex-col border-x-0">
@@ -209,11 +242,18 @@ export function MapCanvas() {
         <span className="text-sm font-semibold tracking-wide uppercase">Map Canvas</span>
         {currentFrame && (
           <span className="ml-2 truncate font-mono text-xs text-text-muted">
-            {currentFrame.filename}
+            {displayFilename(currentFrame.filename)}
+            {currentFrame.copyIndex > 0 || (state.assets[currentFrame.filename]?.length ?? 0) > 1
+              ? ` · copy ${currentFrame.copyIndex + 1}`
+              : ''}
           </span>
         )}
-        {image && (
-          <button type="button" className="btn-primary ml-auto text-xs" onClick={fitToView}>
+        {hasCanvas && (
+          <button
+            type="button"
+            className="btn-primary ml-auto text-xs"
+            onClick={image ? fitToView : fitBlankToView}
+          >
             Fit View
           </button>
         )}
@@ -224,6 +264,19 @@ export function MapCanvas() {
           <div className="flex h-full flex-col items-center justify-center gap-3 text-text-muted">
             <Map className="h-16 w-16 opacity-30" />
             <p className="text-sm">Load a folder to display the map canvas</p>
+          </div>
+        ) : isMissing ? (
+          <div className="relative flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <AlertTriangle className="h-16 w-16 text-accent-crimson opacity-80" />
+            <p className="text-lg font-semibold text-accent-crimson">Missing Asset</p>
+            <p className="font-mono text-sm text-text-muted">
+              {displayFilename(currentFrame.filename)}
+            </p>
+            <p className="max-w-sm text-sm text-text-muted">
+              This file is not in the loaded folder. Reload the folder or restore the image to
+              edit this frame.
+            </p>
+            <CanvasToolbar />
           </div>
         ) : (
           <>
@@ -254,8 +307,25 @@ export function MapCanvas() {
               style={{ cursor: isPanMode ? 'grab' : tool === 'brush' ? 'crosshair' : 'default' }}
             >
               <Layer>
-                {image && (
-                  <KonvaImage image={image} width={imageWidth} height={imageHeight} listening={false} />
+                {image ? (
+                  <KonvaImage image={image} width={canvasWidth} height={canvasHeight} listening={false} />
+                ) : (
+                  <>
+                    <Rect
+                      width={canvasWidth}
+                      height={canvasHeight}
+                      fill="#141418"
+                      listening={false}
+                    />
+                    <Rect
+                      width={canvasWidth}
+                      height={canvasHeight}
+                      stroke="#2a2a30"
+                      strokeWidth={2}
+                      dash={[12, 8]}
+                      listening={false}
+                    />
+                  </>
                 )}
 
                 {annotations.strokes.map((stroke) => (

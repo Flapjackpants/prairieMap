@@ -4,8 +4,8 @@ import { useProject } from '../../context/ProjectContext';
 import type { FactionStat } from '../../types/project';
 
 export function InfoBoard() {
-  const { state, currentFrame, currentFrameData, updateFrameInfo } = useProject();
-  const info = currentFrameData?.info;
+  const { state, currentFrame, updateFrameInfo } = useProject();
+  const info = currentFrame?.frameData.info;
   const { palette } = state;
 
   const updateStat = (id: string, field: Partial<FactionStat>) => {
