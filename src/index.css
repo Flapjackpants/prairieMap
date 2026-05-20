@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-surface: #121214;
+  --color-surface-raised: #1a1a1f;
+  --color-surface-overlay: #222228;
+  --color-border: #2a2a30;
+  --color-border-bright: #3d3d48;
+  --color-text-primary: #e8e8ed;
+  --color-text-muted: #8b8b96;
+  --color-accent-cyan: #00e5ff;
+  --color-accent-crimson: #ff2d55;
+  --color-accent-emerald: #00e676;
+  --color-accent-amber: #ffc400;
+  --color-accent-blue: #448aff;
+  --font-display: 'Rajdhani', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-display);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-bright);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-cyan);
+}
+
+.panel {
+  @apply flex flex-col border border-border bg-surface-raised;
+}
+
+.panel-header {
+  @apply flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5;
+}
+
+.btn-icon {
+  @apply flex h-8 w-8 items-center justify-center rounded border border-border bg-surface-overlay text-text-muted transition-colors hover:border-accent-cyan/50 hover:text-accent-cyan disabled:opacity-40 disabled:hover:border-border disabled:hover:text-text-muted;
+}
+
+.btn-icon-active {
+  @apply border-accent-cyan/60 bg-accent-cyan/10 text-accent-cyan;
+}
+
+.btn-primary {
+  @apply rounded border border-accent-cyan/40 bg-accent-cyan/10 px-3 py-1.5 text-sm font-semibold tracking-wide text-accent-cyan transition-colors hover:bg-accent-cyan/20;
+}
+
+.input-field {
+  @apply w-full rounded border border-border bg-surface px-2.5 py-1.5 font-mono text-sm text-text-primary placeholder:text-text-muted focus:border-accent-cyan/50 focus:outline-none;
+}
+
+.neon-glow {
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
+}
