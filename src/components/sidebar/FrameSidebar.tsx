@@ -1,9 +1,14 @@
-import { AlertTriangle, Copy, Film, GripVertical, ImageIcon, Trash2 } from 'lucide-react';
+import { AlertTriangle, Copy, Film, ImageIcon, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { FrameDuplicateOptions } from '../../types/project';
 import { displayFilename, resolveTimelineEntry } from '../../utils/projectHelpers';
 import { DuplicateFrameModal } from './DuplicateFrameModal';
+
+function frameCode(index: number, label: string): string {
+  const slug = label.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 12).toUpperCase();
+  return `${String(index + 1).padStart(2, '0')} // FRAME_${slug || 'MAP'}`;
+}
 
 export function FrameSidebar() {
   const {
@@ -82,35 +87,40 @@ export function FrameSidebar() {
       : null;
 
   return (
-    <aside className="panel border-r-0 border-l-0">
+    <aside className="panel">
       <div className="panel-header">
-        <Film className="h-4 w-4 text-accent-cyan" />
-        <span className="text-sm font-semibold tracking-wide uppercase">Timeline</span>
-        <span className="ml-auto font-mono text-xs text-text-muted">
-          {timeline.length > 0 ? `${currentTimelineIndex + 1}/${timeline.length}` : '—'}
+        <span className="led led-on" aria-hidden />
+        <span className="panel-bracket">[[</span>
+        <Film className="h-3.5 w-3.5 text-accent-orange" />
+        <span className="panel-title">Timeline_Control</span>
+        <span className="panel-bracket">]]</span>
+        <span className="ml-auto font-mono text-[10px] tracking-widest text-accent-cyan tabular-nums">
+          {timeline.length > 0
+            ? `${String(currentTimelineIndex + 1).padStart(2, '0')}/${String(timeline.length).padStart(2, '0')}`
+            : '—/—'}
         </span>
         {timeline.length > 0 && (
           <button
             type="button"
-            className="btn-icon ml-1"
+            className="btn-icon ml-1 h-7 w-7"
             title="Duplicate current frame"
             onClick={(e) => openDuplicateModal(currentTimelineIndex, e)}
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-3 w-3" />
           </button>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="panel-inset flex-1 overflow-y-auto p-2">
         {timeline.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center">
-            <ImageIcon className="h-10 w-10 text-border-bright" />
-            <p className="text-sm text-text-muted">
-              Load a folder of map images to begin your chronology.
+            <ImageIcon className="h-10 w-10 text-border-bright opacity-50" />
+            <p className="font-mono text-[10px] leading-relaxed tracking-widest text-text-muted uppercase">
+              Load map folder to initialize diagnostic rack.
             </p>
           </div>
         ) : (
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {timeline.map((entry, index) => {
               const resolved = resolveTimelineEntry(state, index)!;
               const isActive = index === currentTimelineIndex;
@@ -119,7 +129,7 @@ export function FrameSidebar() {
               const label = displayFilename(entry.filename);
               const copyLabel =
                 (state.assets[entry.filename]?.length ?? 0) > 1
-                  ? ` · copy ${entry.copyIndex + 1}`
+                  ? ` · CPY_${entry.copyIndex + 1}`
                   : '';
 
               return (
@@ -130,40 +140,37 @@ export function FrameSidebar() {
                   onDragOver={(e) => handleDragOver(index, e)}
                   onDrop={(e) => handleDrop(index, e)}
                   onDragEnd={handleDragEnd}
-                  className={`rounded border transition-all ${
-                    isDropTarget ? 'border-accent-cyan/60 border-dashed' : 'border-transparent'
-                  } ${isDragging ? 'opacity-50' : ''}`}
+                  className={`transition-all ${isDragging ? 'opacity-50' : ''} ${
+                    isDropTarget ? 'outline outline-1 outline-dashed outline-accent-cyan/50' : ''
+                  }`}
                 >
-                  <div
-                    className={`group flex w-full items-center gap-0.5 rounded border p-1 ${
-                      isActive
-                        ? 'border-accent-cyan/50 bg-accent-cyan/10 neon-glow'
-                        : 'border-transparent hover:border-border hover:bg-surface-overlay'
-                    }`}
-                  >
+                  <div className={`group rack-slot ${isActive ? 'rack-slot-active' : ''}`}>
                     <div
-                      className="flex shrink-0 cursor-grab items-center px-0.5 text-text-muted active:cursor-grabbing"
+                      className="grip-ridges flex w-3 shrink-0 cursor-grab items-stretch border-r border-metal-shadow active:cursor-grabbing"
                       title="Drag to reorder"
-                    >
-                      <GripVertical className="h-4 w-4" />
-                    </div>
+                    />
 
                     <button
                       type="button"
                       onClick={() => setTimelineIndex(index)}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     >
-                      <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded border border-border bg-surface">
+                      <span
+                        className={`led ${isActive ? 'led-on' : ''}`}
+                        aria-label={isActive ? 'Active frame' : 'Inactive frame'}
+                      />
+
+                      <div className="rack-thumb">
                         {resolved.isMissing ? (
                           <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-accent-crimson/10 px-0.5">
-                            <AlertTriangle className="h-4 w-4 text-accent-crimson" />
-                            <span className="text-center font-mono text-[7px] leading-tight text-accent-crimson">
-                              MISSING
+                            <AlertTriangle className="h-4 w-4 text-accent-orange" />
+                            <span className="text-center font-mono text-[6px] leading-tight text-accent-orange uppercase">
+                              ERR
                             </span>
                           </div>
                         ) : resolved.isBlank ? (
                           <div className="flex h-full w-full items-center justify-center bg-surface-overlay">
-                            <ImageIcon className="h-5 w-5 text-border-bright" />
+                            <ImageIcon className="h-5 w-5 text-border-bright opacity-60" />
                           </div>
                         ) : (
                           <img
@@ -173,42 +180,43 @@ export function FrameSidebar() {
                             draggable={false}
                           />
                         )}
-                        <span className="absolute bottom-0 left-0 bg-surface/90 px-1 font-mono text-[10px] text-accent-cyan">
-                          {index + 1}
+                        <span className="absolute bottom-0 left-0 bg-surface/95 px-1 font-mono text-[9px] tabular-nums text-accent-cyan">
+                          {String(index + 1).padStart(2, '0')}
                         </span>
                       </div>
+
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-semibold text-text-primary">
-                          Frame {index + 1}
-                          {resolved.isBlank && (
-                            <span className="ml-1 font-normal text-accent-amber">· blank</span>
-                          )}
-                          {resolved.isMissing && (
-                            <span className="ml-1 font-normal text-accent-crimson">· missing</span>
-                          )}
+                        <p className="truncate font-mono text-[10px] font-semibold tracking-wider text-text-primary uppercase">
+                          {frameCode(index, label)}
                         </p>
-                        <p className="truncate font-mono text-[10px] text-text-muted">
+                        <p className="truncate font-mono text-[9px] tracking-wide text-text-muted uppercase">
                           {label}
                           {copyLabel}
+                          {resolved.isBlank && (
+                            <span className="text-accent-orange"> · BLK</span>
+                          )}
+                          {resolved.isMissing && (
+                            <span className="text-accent-orange"> · MIS</span>
+                          )}
                         </p>
                       </div>
                     </button>
 
                     <button
                       type="button"
-                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 hover:border-accent-cyan/50 hover:text-accent-cyan focus:opacity-100"
+                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
                       title="Duplicate frame"
                       onClick={(e) => openDuplicateModal(index, e)}
                     >
-                      <Copy className="h-3.5 w-3.5" />
+                      <Copy className="h-3 w-3" />
                     </button>
                     <button
                       type="button"
-                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 hover:border-accent-crimson/60 hover:bg-accent-crimson/10 hover:text-accent-crimson focus:opacity-100"
+                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 hover:!text-accent-crimson focus:opacity-100"
                       title="Delete frame"
                       onClick={(e) => handleDelete(index, e)}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      <Trash2 className="h-3 w-3" />
                     </button>
                   </div>
                 </li>
@@ -219,18 +227,21 @@ export function FrameSidebar() {
       </div>
 
       {currentFrame && (
-        <div className="border-t border-border px-3 py-2">
-          <p className="truncate font-mono text-[10px] text-text-muted">ACTIVE</p>
-          <p className="truncate text-xs font-medium text-accent-cyan">
+        <div className="border-t border-metal-shadow bg-surface px-3 py-2">
+          <div className="mb-1 flex items-center gap-1.5">
+            <span className="led led-on" aria-hidden />
+            <p className="font-mono text-[9px] tracking-widest text-accent-orange uppercase">Active_Slot</p>
+          </div>
+          <p className="truncate font-mono text-[10px] tracking-wide text-accent-cyan uppercase">
             {displayFilename(currentFrame.filename)}
-            {currentFrame.isMissing && ' (missing asset)'}
+            {currentFrame.isMissing && ' · ERR_MISSING'}
           </p>
         </div>
       )}
 
       {duplicateSource && duplicateSourceIndex !== null && (
         <DuplicateFrameModal
-          sourceLabel={`Frame ${duplicateSourceIndex + 1} — ${displayFilename(duplicateSource.filename)}${duplicateResolved && (state.assets[duplicateSource.filename]?.length ?? 0) > 1 ? ` (copy ${duplicateSource.copyIndex + 1})` : ''}`}
+          sourceLabel={`${String(duplicateSourceIndex + 1).padStart(2, '0')} // ${displayFilename(duplicateSource.filename)}${duplicateResolved && (state.assets[duplicateSource.filename]?.length ?? 0) > 1 ? ` · CPY_${duplicateSource.copyIndex + 1}` : ''}`}
           onConfirm={handleDuplicateConfirm}
           onClose={() => setDuplicateSourceIndex(null)}
         />

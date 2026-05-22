@@ -24,7 +24,7 @@ export function FlatRegionLabels({ country }: FlatRegionLabelsProps) {
           text={country.name}
           fontSize={label.fontSize}
           fill="#f0f0f5"
-          fontFamily="Times New Roman"
+          fontFamily="JetBrains Mono, monospace"
           fontStyle="bold"
           letterSpacing={label.letterSpacing}
           rotation={0}

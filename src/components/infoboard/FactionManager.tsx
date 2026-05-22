@@ -10,15 +10,18 @@ export function FactionManager() {
   if (palette.length === 0) return null;
 
   return (
-    <section className="border-t border-border pt-3">
+    <section className="border-t border-metal-shadow pt-3">
       <button
         type="button"
         className="mb-2 flex w-full items-center gap-2 text-left"
         onClick={() => setExpanded((e) => !e)}
       >
-        <Settings2 className="h-4 w-4 text-accent-cyan" />
-        <span className="text-xs font-semibold tracking-wide uppercase">Manage Nations</span>
-        <span className="ml-auto font-mono text-[10px] text-text-muted">
+        <span className={`led ${expanded ? 'led-on' : ''}`} aria-hidden />
+        <Settings2 className="h-3.5 w-3.5 text-accent-orange" />
+        <span className="font-mono text-[10px] font-semibold tracking-widest text-text-primary uppercase">
+          [[ Nation_Registry ]]
+        </span>
+        <span className="ml-auto font-mono text-[10px] tracking-widest text-accent-cyan">
           {expanded ? '−' : '+'}
         </span>
       </button>
@@ -28,17 +31,21 @@ export function FactionManager() {
           {palette.map((faction) => (
             <li
               key={faction.id}
-              className="rounded border border-border bg-surface p-2.5"
+              className="border border-metal-shadow bg-surface p-2.5"
               style={{ borderLeftColor: faction.hex, borderLeftWidth: 3 }}
             >
               <div className="mb-2 flex items-center gap-1.5">
-                <Flag className="h-3.5 w-3.5 text-text-muted" />
-                <span className="font-mono text-[10px] text-text-muted">FACTION</span>
+                <Flag className="h-3 w-3 text-text-muted" />
+                <span className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
+                  Unit_ID
+                </span>
               </div>
               <label className="mb-1.5 block">
-                <span className="mb-0.5 block font-mono text-[10px] text-text-muted">Name</span>
+                <span className="mb-0.5 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
+                  Designation
+                </span>
                 <input
-                  className="input-field py-1 text-xs uppercase"
+                  className="input-field py-1 text-[10px]"
                   value={faction.name}
                   onChange={(e) =>
                     updateFactionMetadata(faction.id, { name: e.target.value })
@@ -46,7 +53,9 @@ export function FactionManager() {
                 />
               </label>
               <label className="block">
-                <span className="mb-0.5 block font-mono text-[10px] text-text-muted">Color</span>
+                <span className="mb-0.5 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
+                  Chroma
+                </span>
                 <div className="flex gap-2">
                   <input
                     type="color"
@@ -54,10 +63,10 @@ export function FactionManager() {
                     onChange={(e) =>
                       updateFactionMetadata(faction.id, { hex: e.target.value })
                     }
-                    className="h-8 w-10 cursor-pointer rounded border border-border bg-transparent"
+                    className="h-8 w-10 cursor-pointer border border-metal-shadow bg-transparent"
                   />
                   <input
-                    className="input-field flex-1 py-1 font-mono text-xs"
+                    className="input-field flex-1 py-1 text-[10px] normal-case"
                     value={faction.hex}
                     onChange={(e) =>
                       updateFactionMetadata(faction.id, { hex: e.target.value })
@@ -65,8 +74,8 @@ export function FactionManager() {
                   />
                 </div>
               </label>
-              <p className="mt-2 text-[10px] text-text-muted">
-                Updates fill, borders, and labels on every frame for this nation.
+              <p className="mt-2 font-mono text-[9px] leading-relaxed tracking-wide text-text-muted uppercase">
+                Syncs fill, borders, labels on all frames.
               </p>
             </li>
           ))}

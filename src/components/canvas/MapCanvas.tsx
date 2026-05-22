@@ -284,45 +284,50 @@ export function MapCanvas() {
         : 'default';
 
   return (
-    <main className="panel flex min-w-0 flex-col border-x-0">
+    <main className="panel flex min-w-0 flex-col">
       <div className="panel-header">
-        <Map className="h-4 w-4 text-accent-cyan" />
-        <span className="text-sm font-semibold tracking-wide uppercase">Map Canvas</span>
+        <span className="led led-cyan" aria-hidden />
+        <span className="panel-bracket">[</span>
+        <Map className="h-3.5 w-3.5 text-accent-cyan" />
+        <span className="panel-title">Viewport_Display</span>
+        <span className="panel-bracket">]</span>
         {currentFrame && (
-          <span className="ml-2 truncate font-mono text-xs text-text-muted">
+          <span className="ml-1 truncate font-mono text-[10px] tracking-wider text-text-muted uppercase">
             {displayFilename(currentFrame.filename)}
             {currentFrame.copyIndex > 0 || (state.assets[currentFrame.filename]?.length ?? 0) > 1
-              ? ` · copy ${currentFrame.copyIndex + 1}`
+              ? ` · CPY_${currentFrame.copyIndex + 1}`
               : ''}
           </span>
         )}
         {hasCanvas && (
           <button
             type="button"
-            className="btn-primary ml-auto text-xs"
+            className="btn-primary ml-auto"
             onClick={image ? fitToView : fitBlankToView}
           >
-            Fit View
+            Fit
           </button>
         )}
       </div>
 
-      <div ref={containerRef} className="relative min-h-0 flex-1 overflow-hidden bg-[#0a0a0c]">
+      <div className="panel-inset flex min-h-0 flex-1 flex-col bg-surface">
+      <div ref={containerRef} className="crt-bezel">
         {!currentFrame ? (
-          <div className="flex h-full flex-col items-center justify-center gap-3 text-text-muted">
-            <Map className="h-16 w-16 opacity-30" />
-            <p className="text-sm">Load a folder to display the map canvas</p>
+          <div className="relative z-[2] flex h-full flex-col items-center justify-center gap-3 font-mono text-xs tracking-widest text-text-muted uppercase">
+            <Map className="h-14 w-14 opacity-25" />
+            <p>:: Awaiting_Map_Feed ::</p>
           </div>
         ) : isMissing ? (
-          <div className="relative flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <AlertTriangle className="h-16 w-16 text-accent-crimson opacity-80" />
-            <p className="text-lg font-semibold text-accent-crimson">Missing Asset</p>
-            <p className="font-mono text-sm text-text-muted">
+          <div className="relative z-[2] flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+            <AlertTriangle className="h-14 w-14 text-accent-orange opacity-90" />
+            <p className="font-mono text-sm font-bold tracking-widest text-accent-orange uppercase">
+              Asset_Missing
+            </p>
+            <p className="font-mono text-[10px] tracking-wider text-accent-cyan uppercase">
               {displayFilename(currentFrame.filename)}
             </p>
-            <p className="max-w-sm text-sm text-text-muted">
-              This file is not in the loaded folder. Reload the folder or restore the image to
-              edit this frame.
+            <p className="max-w-sm font-mono text-[10px] leading-relaxed tracking-wide text-text-muted uppercase">
+              Reload folder or restore image to edit this frame.
             </p>
             <CanvasToolbar />
           </div>
@@ -399,13 +404,14 @@ export function MapCanvas() {
         )}
 
         <div
-          className="pointer-events-none absolute inset-0 opacity-[0.03]"
+          className="pointer-events-none absolute inset-0 z-[1] opacity-[0.04]"
           style={{
             backgroundImage:
               'linear-gradient(#00e5ff 1px, transparent 1px), linear-gradient(90deg, #00e5ff 1px, transparent 1px)',
             backgroundSize: '32px 32px',
           }}
         />
+      </div>
       </div>
 
       <PlaybackControls />
