@@ -25,11 +25,22 @@ class CountryLabelSettings(BaseModel):
     letterSpacing: float = 0
 
 
+class LabelSpine(BaseModel):
+    x1: float
+    y1: float
+    cx: float
+    cy: float
+    x2: float
+    y2: float
+
+
 class RegionLabelPlacement(BaseModel):
     x: float
     y: float
     fontSize: float
     letterSpacing: float
+    spine: LabelSpine | None = None
+    rotation: float | None = None
 
 
 class CountryTerritory(BaseModel):

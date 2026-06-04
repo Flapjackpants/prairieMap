@@ -34,6 +34,8 @@ def normalize_country(country: CountryTerritory) -> CountryTerritory:
         return recompute_country_labels(country.model_copy(update={"regionLabels": []}))
     if not country.regionLabels:
         return country.model_copy(update={"regionLabels": []})
+    if country.regions and any(label.spine is None for label in country.regionLabels):
+        return recompute_country_labels(country)
     return country
 
 

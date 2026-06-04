@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
@@ -7,10 +8,15 @@ from shapely import make_valid
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
-from app.models.project import CountryLabelSettings, CountryTerritory
+from app.models.project import CountryLabelSettings, CountryTerritory, LabelSpine
 
 MIN_REGION_AREA = 80
 ANCHOR_EPS = 2.0
+LABEL_MIN_FONT = 9
+LABEL_MAX_FONT = 48
+LETTER_SPACING_FACTOR = 0.52
+SPINE_LENGTH_FACTOR = 0.65
+ARC_SAMPLES = 48
 PolygonRing = list[list[float]]
 
 
@@ -190,33 +196,164 @@ def _clamp(n: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, n))
 
 
-def compute_flat_label_for_region(name: str, ring: PolygonRing) -> dict[str, float]:
+def _point_in_ring(point: dict[str, float], ring: PolygonRing) -> bool:
+    inside = False
+    x, y = point["x"], point["y"]
+    n = len(ring)
+    for i in range(n):
+        x1, y1 = ring[i]
+        x2, y2 = ring[(i + 1) % n]
+        if (y1 > y) != (y2 > y):
+            xinters = (x2 - x1) * (y - y1) / (y2 - y1 + 1e-12) + x1
+            if x < xinters:
+                inside = not inside
+    return inside
+
+
+def exterior_rings_only(regions: list[PolygonRing]) -> list[PolygonRing]:
+    valid = [r for r in regions if len(r) >= 3 and polygon_area(r) >= 1]
+    exteriors: list[PolygonRing] = []
+    for ring in valid:
+        center = polygon_centroid(ring)
+        area = polygon_area(ring)
+        is_hole = False
+        for other in valid:
+            if other is ring:
+                continue
+            if polygon_area(other) > area and _point_in_ring(center, other):
+                is_hole = True
+                break
+        if not is_hole:
+            exteriors.append(ring)
+    return exteriors
+
+
+def _compute_principal_axis(ring: PolygonRing) -> tuple[float, float, float, float]:
+    center = polygon_centroid(ring)
+    xx = yy = xy = 0.0
+    for x, y in ring:
+        px, py = x - center["x"], y - center["y"]
+        xx += px * px
+        yy += py * py
+        xy += px * py
+    n = max(len(ring), 1)
+    xx /= n
+    yy /= n
+    xy /= n
+    trace = xx + yy
+    det = xx * yy - xy * xy
+    disc = max(0.0, (trace / 2) ** 2 - det)
+    lambda1 = trace / 2 + math.sqrt(disc)
+    dx, dy = xy, lambda1 - xx
+    length = math.hypot(dx, dy)
+    if length < 1e-6:
+        dx, dy = 1.0, 0.0
+    else:
+        dx, dy = dx / length, dy / length
+    perp_x, perp_y = -dy, dx
+    min_maj = max_maj = min_min = max_min = None
+    for x, y in ring:
+        px, py = x - center["x"], y - center["y"]
+        maj = px * dx + py * dy
+        min_ = px * perp_x + py * perp_y
+        min_maj = maj if min_maj is None else min(min_maj, maj)
+        max_maj = maj if max_maj is None else max(max_maj, maj)
+        min_min = min_ if min_min is None else min(min_min, min_)
+        max_min = min_ if max_min is None else max(max_min, min_)
+    span = max((max_maj or 0) - (min_maj or 0), 1.0)
+    minor = max((max_min or 0) - (min_min or 0), 1.0)
+    return dx, dy, span, minor
+
+
+def _build_spine(ring: PolygonRing) -> LabelSpine:
+    center = polygon_centroid(ring)
+    dx, dy, span, minor = _compute_principal_axis(ring)
+    half_len = (span * SPINE_LENGTH_FACTOR) / 2
+    perp_x, perp_y = -dy, dx
+    bulge = minor * 0.1
+    return LabelSpine(
+        x1=center["x"] - dx * half_len,
+        y1=center["y"] - dy * half_len,
+        cx=center["x"] + perp_x * bulge,
+        cy=center["y"] + perp_y * bulge,
+        x2=center["x"] + dx * half_len,
+        y2=center["y"] + dy * half_len,
+    )
+
+
+def _quad_point(spine: LabelSpine, t: float) -> tuple[float, float]:
+    u = 1 - t
+    x = u * u * spine.x1 + 2 * u * t * spine.cx + t * t * spine.x2
+    y = u * u * spine.y1 + 2 * u * t * spine.cy + t * t * spine.y2
+    return x, y
+
+
+def _quad_tangent(spine: LabelSpine, t: float) -> tuple[float, float]:
+    u = 1 - t
+    tx = 2 * u * (spine.cx - spine.x1) + 2 * t * (spine.x2 - spine.cx)
+    ty = 2 * u * (spine.cy - spine.y1) + 2 * t * (spine.y2 - spine.cy)
+    return tx, ty
+
+
+def _build_arc_table(spine: LabelSpine) -> tuple[list[float], float]:
+    lengths = [0.0]
+    prev_x, prev_y = _quad_point(spine, 0)
+    for i in range(1, ARC_SAMPLES + 1):
+        t = i / ARC_SAMPLES
+        x, y = _quad_point(spine, t)
+        lengths.append(lengths[-1] + math.hypot(x - prev_x, y - prev_y))
+        prev_x, prev_y = x, y
+    return lengths, lengths[-1]
+
+
+def _point_at_arc_length(
+    spine: LabelSpine, arc_len: float, table: tuple[list[float], float]
+) -> tuple[float, float, float]:
+    lengths, total = table
+    target = _clamp(arc_len, 0, total)
+    lo, hi = 0, ARC_SAMPLES
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if lengths[mid] < target:
+            lo = mid + 1
+        else:
+            hi = mid
+    i = max(1, lo)
+    len0, len1 = lengths[i - 1], lengths[i]
+    seg = len1 - len0 or 1.0
+    frac = (target - len0) / seg
+    t = (i - 1 + frac) / ARC_SAMPLES
+    x, y = _quad_point(spine, t)
+    return x, y, t
+
+
+def _tangent_degrees_at(spine: LabelSpine, t: float) -> float:
+    tx, ty = _quad_tangent(spine, _clamp(t, 0, 1))
+    return math.degrees(math.atan2(ty, tx))
+
+
+def compute_curved_label_for_region(name: str, ring: PolygonRing) -> dict[str, Any]:
     bounds = combined_bounds([ring])
     area = polygon_area(ring)
-    center = polygon_centroid(ring)
     span = max(bounds["width"], bounds["height"], 1)
-    font_size = _clamp((area**0.5) * 0.09 + span * 0.022, 9, 48)
-    char_count = max(len(name), 1)
-    letter_spacing = 0.0
-    if bounds["width"] > font_size * char_count * 0.55:
-        letter_spacing = _clamp(
-            (bounds["width"] - font_size * char_count * 0.5) / max(char_count - 1, 1),
-            0,
-            font_size * 0.2,
-        )
+    font_size = _clamp((area**0.5) * 0.09 + span * 0.022, LABEL_MIN_FONT, LABEL_MAX_FONT)
+    letter_spacing = font_size * LETTER_SPACING_FACTOR
+    spine = _build_spine(ring)
+    table = _build_arc_table(spine)
+    mid_x, mid_y, _ = _point_at_arc_length(spine, table[1] / 2, table)
     return {
-        "x": center["x"],
-        "y": center["y"],
+        "x": mid_x,
+        "y": mid_y,
         "fontSize": font_size,
         "letterSpacing": letter_spacing,
+        "spine": spine.model_dump(),
+        "rotation": _tangent_degrees_at(spine, 0.5),
     }
 
 
-def compute_region_labels(name: str, regions: list[PolygonRing]) -> list[dict[str, float]]:
+def compute_region_labels(name: str, regions: list[PolygonRing]) -> list[dict[str, Any]]:
     return [
-        compute_flat_label_for_region(name, ring)
-        for ring in regions
-        if len(ring) >= 3 and polygon_area(ring) >= 1
+        compute_curved_label_for_region(name, ring) for ring in exterior_rings_only(regions)
     ]
 
 
@@ -230,7 +367,7 @@ def recompute_country_labels(country: CountryTerritory) -> CountryTerritory:
             "regionLabels": region_labels,
             "labelSettings": CountryLabelSettings(
                 fontSize=primary["fontSize"] if primary else 14,
-                rotation=0,
+                rotation=primary.get("rotation", 0) if primary else 0,
                 letterSpacing=primary["letterSpacing"] if primary else 0,
             ),
         }

@@ -15,12 +15,24 @@ export interface CountryLabelSettings {
   letterSpacing: number;
 }
 
-/** Flat label placement for one disconnected region (exclave). */
+/** Quadratic Bézier spine for curved map labels (HoI4-style). */
+export interface LabelSpine {
+  x1: number;
+  y1: number;
+  cx: number;
+  cy: number;
+  x2: number;
+  y2: number;
+}
+
+/** Label placement for one disconnected region (exclave). */
 export interface RegionLabelPlacement {
   x: number;
   y: number;
   fontSize: number;
   letterSpacing: number;
+  spine?: LabelSpine;
+  rotation?: number;
 }
 
 export interface CountryTerritory {

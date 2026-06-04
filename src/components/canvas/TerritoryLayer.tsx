@@ -2,7 +2,7 @@ import { Circle, Group, Line } from 'react-konva';
 import type { CountryTerritory } from '../../types/project';
 import type { SnapVertex } from '../../utils/vertexSnap';
 import { CountryTerritoryShape } from './CountryTerritoryShape';
-import { FlatRegionLabels } from './FlatRegionLabels';
+import { CurvedRegionLabels } from './CurvedRegionLabels';
 
 interface TerritoryLayerProps {
   countries: CountryTerritory[];
@@ -58,7 +58,7 @@ export function TerritoryLayer({
               isSelected={isSelected}
               onSelect={() => onSelectCountry(country.id)}
             />
-            {country.regions.length > 0 && <FlatRegionLabels country={country} />}
+            {country.regions.length > 0 && <CurvedRegionLabels country={country} />}
           </Group>
         );
       })}

@@ -1,6 +1,9 @@
 from app.services.geometry import (
     apply_territory_transfer,
     claim_anchor_at_point,
+    compute_curved_label_for_region,
+    compute_region_labels,
+    exterior_rings_only,
     polygon_area,
     subtract_polygon,
     union_all_regions,
@@ -88,6 +91,23 @@ def test_transfer_merges_into_target_country_not_sibling_faction():
     assert len(merged_right.regions) >= 1
     left_out = next(c for c in result if c.id == "left")
     assert len(left_out.regions) >= 1
+
+
+def test_curved_label_has_spine():
+    ring = [[0, 0], [200, 0], [200, 80], [0, 80]]
+    label = compute_curved_label_for_region("FRANCE", ring)
+    assert label["spine"] is not None
+    assert "x1" in label["spine"]
+    assert label["letterSpacing"] == label["fontSize"] * 0.52
+
+
+def test_exterior_rings_only_skips_hole():
+    outer = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    hole = [[30, 30], [70, 30], [70, 70], [30, 70]]
+    exteriors = exterior_rings_only([outer, hole])
+    assert len(exteriors) == 1
+    labels = compute_region_labels("B", [outer, hole])
+    assert len(labels) == 1
 
 
 def test_claim_anchor_removes_only_from_selected_country():

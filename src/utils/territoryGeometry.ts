@@ -1,4 +1,5 @@
 import type { CountryTerritory, PolygonRing, RegionLabelPlacement } from '../types/project';
+import { computeCurvedLabelForRegion, exteriorRingsOnly } from './curvedLabel';
 
 export function ringToFlatPoints(ring: PolygonRing): number[] {
   return ring.flatMap(([x, y]) => [x, y]);
@@ -89,43 +90,12 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
-/** Flat label for a single disconnected region (exclave / island). */
-export function computeFlatLabelForRegion(
-  name: string,
-  ring: PolygonRing,
-): RegionLabelPlacement {
-  const bounds = combinedBounds([ring]);
-  const area = polygonArea(ring);
-  const center = polygonCentroid(ring);
-  const span = Math.max(bounds.width, bounds.height, 1);
-  const fontSize = clamp(Math.sqrt(area) * 0.09 + span * 0.022, 9, 48);
-
-  const charCount = Math.max(name.length, 1);
-  let letterSpacing = 0;
-  if (bounds.width > fontSize * charCount * 0.55) {
-    letterSpacing = clamp(
-      (bounds.width - fontSize * charCount * 0.5) / Math.max(charCount - 1, 1),
-      0,
-      fontSize * 0.2,
-    );
-  }
-
-  return {
-    x: center.x,
-    y: center.y,
-    fontSize,
-    letterSpacing,
-  };
-}
-
-/** One flat label per region ring (each non-contiguous landmass after union). */
+/** One curved label per exterior region ring (exclaves / islands; skips holes). */
 export function computeRegionLabels(
   name: string,
   regions: PolygonRing[],
 ): RegionLabelPlacement[] {
-  return regions
-    .filter((ring) => ring.length >= 3 && polygonArea(ring) >= 1)
-    .map((ring) => computeFlatLabelForRegion(name, ring));
+  return exteriorRingsOnly(regions).map((ring) => computeCurvedLabelForRegion(name, ring));
 }
 
 export function recomputeCountryLabels(country: CountryTerritory): CountryTerritory {
@@ -141,7 +111,7 @@ export function recomputeCountryLabels(country: CountryTerritory): CountryTerrit
     regionLabels,
     labelSettings: {
       fontSize: primary?.fontSize ?? 14,
-      rotation: 0,
+      rotation: primary?.rotation ?? 0,
       letterSpacing: primary?.letterSpacing ?? 0,
     },
   };
