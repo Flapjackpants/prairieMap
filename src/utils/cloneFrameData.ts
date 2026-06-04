@@ -7,8 +7,6 @@ import type {
   FrameInfo,
   PolygonRing,
 } from '../types/project';
-import { recomputeCountryLabels } from './territoryGeometry';
-
 function cloneRing(ring: PolygonRing): PolygonRing {
   return ring.map(([x, y]) => [x, y] as [number, number]);
 }
@@ -19,11 +17,13 @@ export function cloneCountry(country: CountryTerritory): CountryTerritory {
     factionId: country.factionId,
     name: country.name,
     color: country.color,
+    extensionColor: country.extensionColor,
     labelSettings: { ...country.labelSettings },
-    regionLabels: country.regionLabels.map((l) => ({ ...l })),
+    regionLabels: country.regionLabels.map((l) => ({ ...l, spine: l.spine ? { ...l.spine } : undefined })),
     regions: country.regions.map(cloneRing),
+    extensionRegions: (country.extensionRegions ?? []).map(cloneRing),
   };
-  return recomputeCountryLabels(cloned);
+  return cloned;
 }
 
 function cloneFactionStat(stat: FactionStat): FactionStat {

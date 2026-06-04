@@ -110,6 +110,50 @@ def test_exterior_rings_only_skips_hole():
     assert len(labels) == 1
 
 
+def test_extend_mode_preserves_labels_and_adds_extension_regions():
+    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    label = {
+        "x": 50,
+        "y": 50,
+        "fontSize": 20,
+        "letterSpacing": 10,
+        "spine": {
+            "x1": 10,
+            "y1": 50,
+            "cx": 50,
+            "cy": 45,
+            "x2": 90,
+            "y2": 50,
+        },
+        "rotation": 0,
+    }
+    nation = CountryTerritory(
+        id="a",
+        factionId="faction-a",
+        name="NATION",
+        color="#3366cc",
+        labelSettings=CountryLabelSettings(),
+        regionLabels=[label],
+        regions=[ring],
+        extensionRegions=[],
+    )
+    add_ring = [[50, 0], [80, 0], [80, 50], [50, 50]]
+    result = apply_territory_transfer(
+        [nation],
+        add_ring,
+        "faction-a",
+        "NATION",
+        "#3366cc",
+        target_country_id="a",
+        preserve_labels=True,
+        extension_mode=True,
+    )
+    out = result[0]
+    assert out.regionLabels[0].model_dump() == label
+    assert len(out.extensionRegions) >= 1
+    assert out.extensionColor is not None
+
+
 def test_claim_anchor_removes_only_from_selected_country():
     square = [[0, 0], [100, 0], [100, 100], [0, 100]]
     nation_a = CountryTerritory(

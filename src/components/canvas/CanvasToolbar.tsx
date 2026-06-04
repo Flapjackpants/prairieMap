@@ -1,9 +1,10 @@
 import { Hand, Hexagon, Link2, MousePointer2, Plus, Trash2 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
-import type { ToolMode } from '../../types/project';
+import type { ToolMode, TerritoryDrawMode } from '../../types/project';
+import { extensionColorForCountry } from '../../utils/colorUtils';
 
 const TOOLS: { id: ToolMode; icon: typeof Hand; label: string; shortcut: string }[] = [
-  { id: 'pan', icon: Hand, label: 'Pan (Space + drag)', shortcut: 'PAN' },
+  { id: 'pan', icon: Hand, label: 'Pan (Space or middle-drag)', shortcut: 'PAN' },
   { id: 'areaSelect', icon: Hexagon, label: 'Area select — click anchors, Enter to close', shortcut: 'SEL' },
   { id: 'select', icon: MousePointer2, label: 'Select territory', shortcut: 'PTR' },
 ];
@@ -17,9 +18,15 @@ export function CanvasToolbar() {
     addPaletteColor,
     deleteCountry,
     setSelectedCountry,
+    setTerritoryDrawMode,
+    currentFrame,
   } = useProject();
-  const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
+  const { tool, palette, activeColorId, carryOverLabels, selectedCountryId, territoryDrawMode } =
+    state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
+  const selectedCountry = selectedCountryId
+    ? currentFrame?.frameData.annotations.countries.find((c) => c.id === selectedCountryId)
+    : undefined;
 
   return (
     <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -62,6 +69,44 @@ export function CanvasToolbar() {
             <Plus className="h-3 w-3" />
           </button>
         </div>
+
+        {selectedCountry && (
+          <>
+            <div className="mx-0.5 h-7 w-px bg-border" />
+            <span className="font-mono text-[8px] tracking-widest text-text-muted uppercase">
+              Draw
+            </span>
+            {(
+              [
+                { mode: 'primary' as TerritoryDrawMode, label: 'PRI', title: 'Primary fill, label moves' },
+                { mode: 'extend' as TerritoryDrawMode, label: 'EXT', title: 'Lighter fill, label stays' },
+              ] as const
+            ).map(({ mode, label, title }) => {
+              const isExtend = mode === 'extend';
+              const bg = isExtend
+                ? extensionColorForCountry(selectedCountry.color, selectedCountry.extensionColor)
+                : selectedCountry.color;
+              const active = territoryDrawMode === mode;
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  title={title}
+                  onClick={() => setTerritoryDrawMode(mode)}
+                  className={`relative h-7 min-w-[2rem] border-2 px-1 font-mono text-[8px] font-bold tracking-wider uppercase transition-all ${
+                    active ? 'border-accent-cyan scale-105 neon-glow-cyan' : 'border-metal-shadow'
+                  }`}
+                  style={{ backgroundColor: bg, color: '#fff', textShadow: '0 1px 2px #000' }}
+                >
+                  {active && (
+                    <span className="led led-on absolute -top-0.5 -right-0.5" aria-hidden />
+                  )}
+                  {label}
+                </button>
+              );
+            })}
+          </>
+        )}
 
         <div className="mx-0.5 hidden h-7 w-px bg-border sm:block" />
 
@@ -108,7 +153,7 @@ export function CanvasToolbar() {
 
       {tool === 'areaSelect' && activeFaction && (
         <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
-          Draw::select nation · anchors extend (no trim) · Overlap=transfer · Enter=close
+          Draw::PRI=label moves · EXT=lighter, label stays · Enter=close
         </p>
       )}
       {tool === 'select' && activeFaction && (

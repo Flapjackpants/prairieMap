@@ -1,5 +1,8 @@
 export type ToolMode = 'pan' | 'areaSelect' | 'select';
 
+/** Primary fill updates labels; extend adds land with lighter fill only. */
+export type TerritoryDrawMode = 'primary' | 'extend';
+
 export interface PaletteColor {
   id: string;
   name: string;
@@ -40,10 +43,14 @@ export interface CountryTerritory {
   factionId: string;
   name: string;
   color: string;
+  /** Lighter fill for extend-drawn regions (defaults from color if omitted). */
+  extensionColor?: string;
   labelSettings: CountryLabelSettings;
   /** One label per region ring (exclaves after union). */
   regionLabels: RegionLabelPlacement[];
   regions: PolygonRing[];
+  /** Rings added in extend mode; rendered with extensionColor. */
+  extensionRegions?: PolygonRing[];
 }
 
 export interface TerritoryDrawings {
@@ -145,6 +152,7 @@ export interface ProjectState {
   carryOverLabels: boolean;
   viewport: ViewportState;
   selectedCountryId: string | null;
+  territoryDrawMode: TerritoryDrawMode;
 }
 
 export interface ProjectExportV2 {

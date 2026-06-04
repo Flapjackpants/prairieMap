@@ -27,6 +27,8 @@ def add_region(req: AddRegionRequest) -> ProjectMutationResponse:
         req.color,
         req.region,
         req.targetCountryId,
+        req.preserveLabels,
+        req.extensionMode,
     )
     return ProjectMutationResponse(project=project)
 

@@ -9,8 +9,6 @@ from app.models.project import (
     FrameAnnotations,
     FrameInfo,
 )
-from app.services.geometry import recompute_country_labels
-
 PolygonRing = list[list[float]]
 
 
@@ -24,11 +22,13 @@ def clone_country(country: CountryTerritory) -> CountryTerritory:
         factionId=country.factionId,
         name=country.name,
         color=country.color,
+        extensionColor=country.extensionColor,
         labelSettings=country.labelSettings.model_copy(),
         regionLabels=[l.model_copy() for l in country.regionLabels],
         regions=[clone_ring(r) for r in country.regions],
+        extensionRegions=[clone_ring(r) for r in country.extensionRegions],
     )
-    return recompute_country_labels(cloned)
+    return cloned
 
 
 def clone_faction_stat(stat: FactionStat) -> FactionStat:

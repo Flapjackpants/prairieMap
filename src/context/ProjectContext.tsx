@@ -21,6 +21,7 @@ import {
   type ProjectExport,
   type ProjectState,
   type ResolvedFrame,
+  type TerritoryDrawMode,
   type ToolMode,
   type ViewportState,
 } from '../types/project';
@@ -57,6 +58,7 @@ type UiAction =
   | { type: 'TOGGLE_CARRY_LABELS' }
   | { type: 'SET_VIEWPORT'; viewport: ViewportState }
   | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
+  | { type: 'SET_TERRITORY_DRAW_MODE'; mode: TerritoryDrawMode }
   | { type: 'SET_FILE_CANVAS_SIZE'; filename: string; width: number; height: number }
   | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
   | { type: 'CLEAR_PROJECT' };
@@ -73,6 +75,7 @@ const initialState: ProjectState = {
   carryOverLabels: true,
   viewport: { scale: 1, x: 0, y: 0 },
   selectedCountryId: null,
+  territoryDrawMode: 'primary',
 };
 
 function uiReducer(state: ProjectState, action: UiAction): ProjectState {
@@ -102,7 +105,13 @@ function uiReducer(state: ProjectState, action: UiAction): ProjectState {
     case 'SET_VIEWPORT':
       return { ...state, viewport: action.viewport };
     case 'SET_SELECTED_COUNTRY':
-      return { ...state, selectedCountryId: action.countryId };
+      return {
+        ...state,
+        selectedCountryId: action.countryId,
+        territoryDrawMode: action.countryId ? state.territoryDrawMode : 'primary',
+      };
+    case 'SET_TERRITORY_DRAW_MODE':
+      return { ...state, territoryDrawMode: action.mode };
     case 'SET_FILE_CANVAS_SIZE': {
       const entry = state.fileRegistry[action.filename];
       if (
@@ -170,6 +179,7 @@ interface ProjectContextValue {
   ) => Promise<void>;
   deleteCountry: (countryId: string) => Promise<void>;
   setSelectedCountry: (countryId: string | null) => void;
+  setTerritoryDrawMode: (mode: TerritoryDrawMode) => void;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => void;
   updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
@@ -475,6 +485,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const factionId = selectedCountry?.factionId ?? paletteFaction!.id;
       const factionName = selectedCountry?.name ?? paletteFaction!.name;
       const color = selectedCountry?.color ?? paletteFaction!.hex;
+      const extend =
+        stateRef.current.territoryDrawMode === 'extend' && Boolean(selectedId);
       await runMutation(() =>
         api.addTerritoryRegion({
           project: toProjectBody(stateRef.current),
@@ -484,6 +496,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           color,
           region,
           targetCountryId: selectedId,
+          preserveLabels: extend,
+          extensionMode: extend,
         }),
       );
     },
@@ -571,6 +585,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const setSelectedCountry = useCallback((countryId: string | null) => {
     dispatch({ type: 'SET_SELECTED_COUNTRY', countryId });
+  }, []);
+
+  const setTerritoryDrawMode = useCallback((mode: TerritoryDrawMode) => {
+    dispatch({ type: 'SET_TERRITORY_DRAW_MODE', mode });
   }, []);
 
   const updateFrameInfo = useCallback(
@@ -712,6 +730,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
+      setTerritoryDrawMode,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,
@@ -749,6 +768,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
+      setTerritoryDrawMode,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,

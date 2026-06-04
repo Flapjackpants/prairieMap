@@ -49,6 +49,8 @@ export async function addTerritoryRegion(params: {
   color: string;
   region: PolygonRing;
   targetCountryId?: string | null;
+  preserveLabels?: boolean;
+  extensionMode?: boolean;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/add-region', {
     method: 'POST',

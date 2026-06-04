@@ -6,6 +6,7 @@ import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { normalizeClosedRing } from '../../utils/territoryGeometry';
 import { SNAP_THRESHOLD_PX } from '../../types/project';
+import { extensionColorForCountry } from '../../utils/colorUtils';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
@@ -47,10 +48,9 @@ export function MapCanvas() {
     moveTerritoryVertex,
     setSelectedCountry,
     setFileCanvasSize,
-    setTool,
   } = useProject();
 
-  const { tool, viewport, selectedCountryId, activeColorId } = state;
+  const { tool, viewport, selectedCountryId, activeColorId, territoryDrawMode } = state;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -58,17 +58,28 @@ export function MapCanvas() {
   const [cursorPoint, setCursorPoint] = useState<{ x: number; y: number } | null>(null);
   const [snapTarget, setSnapTarget] = useState<SnapVertex | null>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
+  const [middlePanHeld, setMiddlePanHeld] = useState(false);
+  const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0 });
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
 
   const image = useLoadedImage(
     currentFrame && !currentFrame.isMissing ? currentFrame.objectUrl : null,
   );
   const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
+  const selectedCountry = countries.find((c) => c.id === selectedCountryId);
+  const draftColor =
+    territoryDrawMode === 'extend' && selectedCountry
+      ? extensionColorForCountry(selectedCountry.color, selectedCountry.extensionColor)
+      : selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
 
-  const isPanMode = tool === 'pan' || spaceHeld;
-  const isAreaSelect = tool === 'areaSelect' && !isPanMode;
-  const isSelect = tool === 'select' && !isPanMode;
-  const showAnchorHandles = (isAreaSelect || isSelect) && !isPanMode;
+  /** Konva left-drag pan (PAN tool or Space). Middle-click uses manual viewport updates. */
+  const isKonvaPanDrag = tool === 'pan' || spaceHeld;
+  const isPointerPanning = isKonvaPanDrag || middlePanHeld;
+  const isAreaSelect = tool === 'areaSelect' && !isPointerPanning;
+  const isSelect = tool === 'select' && !isPointerPanning;
+  const showAnchorHandles = (isAreaSelect || isSelect) && !isPointerPanning;
   const snapThreshold = SNAP_THRESHOLD_PX / Math.max(viewport.scale, 0.15);
 
   useEffect(() => {
@@ -154,6 +165,74 @@ export function MapCanvas() {
       window.removeEventListener('keyup', onKeyUp);
     };
   }, [tool, currentFrame, closeDraftPolygon]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const MIDDLE_BUTTON = 4;
+
+    const endMiddlePan = () => {
+      if (!middlePanRef.current.active) return;
+      middlePanRef.current.active = false;
+      setMiddlePanHeld(false);
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        el.setPointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      middlePanRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
+      setMiddlePanHeld(true);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!(e.buttons & MIDDLE_BUTTON)) {
+        endMiddlePan();
+        return;
+      }
+      if (!middlePanRef.current.active) return;
+      const dx = e.clientX - middlePanRef.current.lastX;
+      const dy = e.clientY - middlePanRef.current.lastY;
+      middlePanRef.current.lastX = e.clientX;
+      middlePanRef.current.lastY = e.clientY;
+      const v = viewportRef.current;
+      setViewport({ ...v, x: v.x + dx, y: v.y + dy });
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.button === 1) endMiddlePan();
+      try {
+        if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const blockMiddleAutoscroll = (e: MouseEvent) => {
+      if (e.button === 1) e.preventDefault();
+    };
+
+    el.addEventListener('pointerdown', onPointerDown, true);
+    el.addEventListener('pointermove', onPointerMove, true);
+    el.addEventListener('pointerup', onPointerUp, true);
+    el.addEventListener('pointercancel', onPointerUp, true);
+    el.addEventListener('auxclick', blockMiddleAutoscroll, true);
+    el.addEventListener('mousedown', blockMiddleAutoscroll, true);
+    return () => {
+      el.removeEventListener('pointerdown', onPointerDown, true);
+      el.removeEventListener('pointermove', onPointerMove, true);
+      el.removeEventListener('pointerup', onPointerUp, true);
+      el.removeEventListener('pointercancel', onPointerUp, true);
+      el.removeEventListener('auxclick', blockMiddleAutoscroll, true);
+      el.removeEventListener('mousedown', blockMiddleAutoscroll, true);
+    };
+  }, [setViewport, currentFrame?.entry.id]);
 
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -297,9 +376,11 @@ export function MapCanvas() {
     if (currentFrame && !image) fitBlankToView();
   }, [currentFrame?.entry.id, image, fitBlankToView]);
 
-  const cursor = isPanMode
-    ? 'grab'
-    : isAreaSelect
+  const cursor = middlePanHeld
+    ? 'grabbing'
+    : isKonvaPanDrag
+      ? 'grab'
+      : isAreaSelect
       ? snapTarget
         ? 'cell'
         : 'crosshair'
@@ -362,7 +443,7 @@ export function MapCanvas() {
               ref={stageRef}
               width={stageSize.width}
               height={stageSize.height}
-              draggable={isPanMode}
+              draggable={isKonvaPanDrag}
               x={viewport.x}
               y={viewport.y}
               scaleX={viewport.scale}
@@ -372,13 +453,13 @@ export function MapCanvas() {
               onClick={handleStageClick}
               onDblClick={handleStageDblClick}
               onDragEnd={(e) => {
-                if (isPanMode) {
-                  setViewport({
-                    ...viewport,
-                    x: e.target.x(),
-                    y: e.target.y(),
-                  });
-                }
+                if (!isKonvaPanDrag) return;
+                const v = viewportRef.current;
+                setViewport({
+                  ...v,
+                  x: e.target.x(),
+                  y: e.target.y(),
+                });
               }}
               style={{ cursor }}
             >
@@ -415,13 +496,10 @@ export function MapCanvas() {
                   activeFactionId={activeColorId}
                   showAnchorHandles={showAnchorHandles}
                   draftPoints={draftPoints}
-                  draftColor={activeColor?.hex ?? '#00e5ff'}
+                  draftColor={draftColor}
                   cursorPoint={cursorPoint}
                   snapTarget={snapTarget}
-                  onSelectCountry={(id) => {
-                    setSelectedCountry(id);
-                    setTool('select');
-                  }}
+                  onSelectCountry={setSelectedCountry}
                   onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>

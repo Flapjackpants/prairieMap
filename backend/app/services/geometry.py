@@ -197,6 +197,48 @@ def _clamp(n: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, n))
 
 
+def lighten_hex(hex_color: str, mix: float = 0.38) -> str:
+    h = hex_color.replace("#", "").strip()
+    if len(h) != 6:
+        return hex_color
+    r = int(h[0:2], 16)
+    g = int(h[2:4], 16)
+    b = int(h[4:6], 16)
+
+    def blend(c: int) -> int:
+        return round(c + (255 - c) * mix)
+
+    return f"#{blend(r):02x}{blend(g):02x}{blend(b):02x}"
+
+
+def _merge_target_country(
+    country: CountryTerritory,
+    new_ring: PolygonRing,
+    faction_name: str,
+    color: str,
+    preserve_labels: bool,
+    extension_mode: bool,
+) -> CountryTerritory:
+    merged_regions = union_all_regions([*country.regions, new_ring])
+    extension_regions = list(country.extensionRegions)
+    ext_color = country.extensionColor or lighten_hex(color)
+    if extension_mode:
+        extension_regions = union_all_regions([*extension_regions, new_ring])
+        ext_color = country.extensionColor or lighten_hex(color)
+
+    update: dict[str, Any] = {
+        "name": faction_name.upper(),
+        "color": color,
+        "regions": merged_regions,
+        "extensionRegions": extension_regions,
+        "extensionColor": ext_color,
+    }
+    patched = country.model_copy(update=update)
+    if preserve_labels:
+        return patched
+    return recompute_country_labels(patched)
+
+
 def _point_in_ring(point: dict[str, float], ring: PolygonRing) -> bool:
     inside = False
     x, y = point["x"], point["y"]
@@ -483,6 +525,8 @@ def apply_territory_transfer(
     faction_name: str,
     color: str,
     target_country_id: str | None = None,
+    preserve_labels: bool = False,
+    extension_mode: bool = False,
 ) -> list[CountryTerritory]:
     updated: list[CountryTerritory] = []
 
@@ -524,15 +568,13 @@ def apply_territory_transfer(
         )
         active_idx = len(updated) - 1
     else:
-        merged = union_all_regions([*updated[active_idx].regions, new_ring])
-        updated[active_idx] = recompute_country_labels(
-            updated[active_idx].model_copy(
-                update={
-                    "name": faction_name.upper(),
-                    "color": color,
-                    "regions": merged,
-                }
-            )
+        updated[active_idx] = _merge_target_country(
+            updated[active_idx],
+            new_ring,
+            faction_name,
+            color,
+            preserve_labels,
+            extension_mode,
         )
 
     return updated
