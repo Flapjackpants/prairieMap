@@ -204,6 +204,9 @@ interface ProjectContextValue {
     patch: Partial<Omit<DivisionMarker, 'id'>>,
   ) => Promise<void>;
   removeDivisionMarker: (id: string) => Promise<void>;
+  copyMarkers: () => void;
+  pasteMarkers: () => Promise<void>;
+  hasMarkerClipboard: boolean;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => void;
   updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
@@ -225,6 +228,18 @@ function currentTarget(frame: ResolvedFrame | null) {
   return { filename: frame.filename, copyIndex: frame.copyIndex };
 }
 
+const MARKER_PASTE_OFFSET = 16;
+
+type MarkerClipboard = { cities: CityMarker[]; divisions: DivisionMarker[] };
+
+function cloneCityMarker(c: CityMarker): CityMarker {
+  return { ...c };
+}
+
+function cloneDivisionMarker(d: DivisionMarker): DivisionMarker {
+  return { ...d, crop: { ...d.crop } };
+}
+
 export function ProjectProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(uiReducer, initialState);
   const [projectId, setProjectId] = useState<string | null>(() =>
@@ -239,6 +254,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const undoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
   const redoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
   const restoringRef = useRef(false);
+  const markerClipboardRef = useRef<MarkerClipboard | null>(null);
+  const [hasMarkerClipboard, setHasMarkerClipboard] = useState(false);
 
   const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
 
@@ -325,25 +342,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     bumpHistory();
     await restoreProjectBody(next);
   }, [projectId, isSyncing, restoreProjectBody, bumpHistory]);
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (isEditableTarget(e.target)) return;
-      const mod = e.metaKey || e.ctrlKey;
-      if (!mod) return;
-      if (e.key === 'z' && !e.shiftKey) {
-        e.preventDefault();
-        void undo();
-        return;
-      }
-      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
-        e.preventDefault();
-        void redo();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [undo, redo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -725,6 +723,92 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [upsertMarkers, setSelectedMarker],
   );
 
+  const copyMarkers = useCallback(() => {
+    const frame = resolveCurrentFrame(stateRef.current);
+    if (!frame) return;
+    const { selectedMarkerId, selectedMarkerKind } = stateRef.current;
+    const ann = frame.frameData.annotations;
+    if (selectedMarkerId && selectedMarkerKind === 'city') {
+      const city = ann.cities.find((c) => c.id === selectedMarkerId);
+      markerClipboardRef.current = {
+        cities: city ? [cloneCityMarker(city)] : [],
+        divisions: [],
+      };
+    } else if (selectedMarkerId && selectedMarkerKind === 'division') {
+      const division = ann.divisions.find((d) => d.id === selectedMarkerId);
+      markerClipboardRef.current = {
+        cities: [],
+        divisions: division ? [cloneDivisionMarker(division)] : [],
+      };
+    } else {
+      markerClipboardRef.current = {
+        cities: ann.cities.map(cloneCityMarker),
+        divisions: ann.divisions.map(cloneDivisionMarker),
+      };
+    }
+    const clip = markerClipboardRef.current;
+    setHasMarkerClipboard(
+      (clip?.cities.length ?? 0) > 0 || (clip?.divisions.length ?? 0) > 0,
+    );
+  }, []);
+
+  const pasteMarkers = useCallback(async () => {
+    const clip = markerClipboardRef.current;
+    if (!clip || (clip.cities.length === 0 && clip.divisions.length === 0)) return;
+    const frame = resolveCurrentFrame(stateRef.current);
+    if (!frame) return;
+    const pastedCities = clip.cities.map((c) => ({
+      ...cloneCityMarker(c),
+      id: uuidv4(),
+      x: c.x + MARKER_PASTE_OFFSET,
+      y: c.y + MARKER_PASTE_OFFSET,
+    }));
+    const pastedDivisions = clip.divisions.map((d) => ({
+      ...cloneDivisionMarker(d),
+      id: uuidv4(),
+      x: d.x + MARKER_PASTE_OFFSET,
+      y: d.y + MARKER_PASTE_OFFSET,
+    }));
+    await upsertMarkers(
+      [...frame.frameData.annotations.cities, ...pastedCities],
+      [...frame.frameData.annotations.divisions, ...pastedDivisions],
+    );
+    if (pastedCities.length > 0) {
+      setSelectedMarker(pastedCities[0].id, 'city');
+    } else if (pastedDivisions.length > 0) {
+      setSelectedMarker(pastedDivisions[0].id, 'division');
+    }
+  }, [upsertMarkers, setSelectedMarker]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        void undo();
+        return;
+      }
+      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        void redo();
+        return;
+      }
+      if (e.key === 'c') {
+        e.preventDefault();
+        copyMarkers();
+        return;
+      }
+      if (e.key === 'v') {
+        e.preventDefault();
+        void pasteMarkers();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo, copyMarkers, pasteMarkers]);
+
   const updateFrameInfo = useCallback(
     async (info: Partial<FrameInfo>) => {
       const target = currentTarget(currentFrame);
@@ -872,6 +956,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addDivisionMarker,
       updateDivisionMarker,
       removeDivisionMarker,
+      copyMarkers,
+      pasteMarkers,
+      hasMarkerClipboard,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,
@@ -917,6 +1004,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       addDivisionMarker,
       updateDivisionMarker,
       removeDivisionMarker,
+      copyMarkers,
+      pasteMarkers,
+      hasMarkerClipboard,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,

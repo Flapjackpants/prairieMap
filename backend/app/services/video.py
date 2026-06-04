@@ -62,6 +62,7 @@ def compile_frames_to_mp4(
     frame_paths: list[Path],
     seconds_per_frame: float,
     output_path: Path,
+    frame_durations: list[float] | None = None,
 ) -> None:
     if not frame_paths:
         raise HTTPException(status_code=400, detail="No frames provided")
@@ -90,40 +91,72 @@ def compile_frames_to_mp4(
     target_w = _even(max_w)
     target_h = _even(max_h)
 
-    framerate = 1.0 / seconds_per_frame
-    vf = (
+    scale_pad = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
         f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2:color=0x121315,"
-        "setsar=1,"
-        f"fps={framerate}"
+        "setsar=1"
     )
 
-    cmd = [
-        ffmpeg,
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-framerate",
-        str(framerate),
-        "-start_number",
-        "0",
-        "-i",
-        str(work_dir / "frame_%04d.png"),
-        "-frames:v",
-        str(len(ordered)),
-        "-vf",
-        vf,
-        "-c:v",
-        "libx264",
-        "-preset",
-        "fast",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        str(output_path),
-    ]
+    use_variable = (
+        frame_durations is not None
+        and len(frame_durations) == len(ordered)
+        and all(d > 0 for d in frame_durations)
+    )
+
+    if use_variable:
+        cmd: list[str] = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y"]
+        for p, dur in zip(ordered, frame_durations):
+            cmd.extend(["-loop", "1", "-t", str(dur), "-i", str(p)])
+        n = len(ordered)
+        parts = [f"[{i}:v]{scale_pad}[v{i}]" for i in range(n)]
+        concat_in = "".join(f"[v{i}]" for i in range(n))
+        parts.append(f"{concat_in}concat=n={n}:v=1[out]")
+        cmd.extend(
+            [
+                "-filter_complex",
+                ";".join(parts),
+                "-map",
+                "[out]",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                str(output_path),
+            ]
+        )
+    else:
+        framerate = 1.0 / seconds_per_frame
+        vf = f"{scale_pad},fps={framerate}"
+        cmd = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-framerate",
+            str(framerate),
+            "-start_number",
+            "0",
+            "-i",
+            str(work_dir / "frame_%04d.png"),
+            "-frames:v",
+            str(len(ordered)),
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:

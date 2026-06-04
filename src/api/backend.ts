@@ -211,9 +211,13 @@ export async function initFromFilenames(
 export async function compileVideo(
   frames: Blob[],
   secondsPerFrame: number,
+  frameDurations?: number[],
 ): Promise<Blob> {
   const form = new FormData();
   form.append('seconds_per_frame', String(secondsPerFrame));
+  if (frameDurations && frameDurations.length === frames.length) {
+    form.append('frame_durations', JSON.stringify(frameDurations));
+  }
   frames.forEach((blob, i) => {
     form.append('frames', blob, `frame_${String(i).padStart(4, '0')}.png`);
   });

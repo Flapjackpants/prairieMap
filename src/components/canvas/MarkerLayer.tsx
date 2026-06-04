@@ -1,4 +1,4 @@
-import { Group, Image as KonvaImage, Rect, Text } from 'react-konva';
+import { Circle, Group, Image as KonvaImage, Rect, Text } from 'react-konva';
 import type Konva from 'konva';
 import type { CityMarker, DivisionMarker, MarkerKind } from '../../types/project';
 import { DEFAULT_CITY_MARKER_SIZE } from '../../types/project';
@@ -120,14 +120,11 @@ export function MarkerLayer({
               onSelectMarker(city.id, 'city');
             }}
           >
-            <Rect
-              x={-halfCity}
-              y={-halfCity}
-              width={citySize}
-              height={citySize}
+            <Circle
+              radius={halfCity}
               fill="#ffffff"
-              stroke={isSelected ? '#00e5ff' : '#1a1a1e'}
-              strokeWidth={isSelected ? 2 : 1}
+              stroke={isSelected ? '#00e5ff' : '#2a2a30'}
+              strokeWidth={isSelected ? 2 : 1.5}
             />
             <Text
               x={-60}

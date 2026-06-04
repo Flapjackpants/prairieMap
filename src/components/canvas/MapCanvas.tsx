@@ -11,6 +11,7 @@ import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import { TerritoryLayer } from './TerritoryLayer';
 import { MarkerLayer } from './MarkerLayer';
+import { CityNameModal } from './CityNameModal';
 import { DivisionCropModal } from './DivisionCropModal';
 
 const MIN_SCALE = 0.1;
@@ -59,6 +60,9 @@ export function MapCanvas() {
   const { tool, viewport, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
     state;
   const [cropDivisionId, setCropDivisionId] = useState<string | null>(null);
+  const [pendingCityPlacement, setPendingCityPlacement] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -86,6 +90,7 @@ export function MapCanvas() {
   const isSelect = tool === 'select' && !isPointerPanning;
   const isCityTool = tool === 'city' && !isPointerPanning;
   const isDivisionTool = tool === 'division' && !isPointerPanning;
+  const isPlacementTool = isCityTool || isDivisionTool;
   const isMarkerInteractive = (isSelect || isCityTool || isDivisionTool) && !isPointerPanning;
   const showAnchorHandles = (isAreaSelect || isSelect) && !isPointerPanning;
   const cities = currentFrame?.frameData.annotations.cities ?? [];
@@ -108,6 +113,10 @@ export function MapCanvas() {
     setCursorPoint(null);
     setSnapTarget(null);
   }, [currentFrame?.entry.id]);
+
+  useEffect(() => {
+    if (tool !== 'city') setPendingCityPlacement(null);
+  }, [tool]);
 
   const getPointerOnImage = useCallback(() => {
     const stage = stageRef.current;
@@ -288,23 +297,25 @@ export function MapCanvas() {
     setSnapTarget(snap);
   };
 
-  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handlePlacementClick = useCallback(() => {
     const raw = getPointerOnImage();
     if (!raw) return;
-
     if (isCityTool) {
-      const name = window.prompt('City name:', 'City');
-      if (name === null) return;
-      void addCityMarker(raw.x, raw.y, name);
+      setPendingCityPlacement({ x: raw.x, y: raw.y });
       return;
     }
-
     if (isDivisionTool) {
       void addDivisionMarker(raw.x, raw.y).then((id) => {
         if (id) setCropDivisionId(id);
       });
-      return;
     }
+  }, [getPointerOnImage, isCityTool, isDivisionTool, addDivisionMarker]);
+
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    const raw = getPointerOnImage();
+    if (!raw) return;
+
+    if (isPlacementTool) return;
 
     if (!isAreaSelect || !activeColor) return;
     if (e.evt.altKey) {
@@ -537,6 +548,19 @@ export function MapCanvas() {
                     void moveTerritoryVertex(countryId, ringIndex, vertexIndex, x, y)
                   }
                 />
+                {isPlacementTool && (
+                  <Rect
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    fill="transparent"
+                    listening
+                    onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
+                      if (e.evt.button !== 0) return;
+                      e.cancelBubble = true;
+                      handlePlacementClick();
+                    }}
+                  />
+                )}
                 <MarkerLayer
                   cities={cities}
                   divisions={divisions}
@@ -565,6 +589,17 @@ export function MapCanvas() {
         />
       </div>
       </div>
+
+      {pendingCityPlacement && (
+        <CityNameModal
+          onClose={() => setPendingCityPlacement(null)}
+          onConfirm={(name) => {
+            const { x, y } = pendingCityPlacement;
+            setPendingCityPlacement(null);
+            void addCityMarker(x, y, name);
+          }}
+        />
+      )}
 
       {cropDivisionId && (
         <DivisionCropModal

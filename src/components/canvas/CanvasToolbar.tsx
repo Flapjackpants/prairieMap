@@ -135,7 +135,7 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
       )}
       {tool === 'city' && (
         <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
-          Click map to place city · name prompt
+          Click anywhere on map to place city (nation not required)
         </p>
       )}
       {tool === 'division' && (

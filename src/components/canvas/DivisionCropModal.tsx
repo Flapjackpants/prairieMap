@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
-import { isBlankAssetKey } from '../../types/project';
+import { DEFAULT_DIVISION_MARKER_SIZE, isBlankAssetKey } from '../../types/project';
 import type { DivisionCropRect } from '../../types/project';
 
 interface DivisionCropModalProps {
@@ -18,7 +18,7 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
   const [crop, setCrop] = useState<DivisionCropRect>(
     division?.crop ?? { x: 0, y: 0, width: 64, height: 64 },
   );
-  const [size, setSize] = useState(division?.size ?? 48);
+  const [size, setSize] = useState(division?.size ?? DEFAULT_DIVISION_MARKER_SIZE);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; startCrop: DivisionCropRect } | null>(null);

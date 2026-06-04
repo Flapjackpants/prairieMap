@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/video", tags=["video"])
 @router.post("/compile")
 async def compile_video(
     seconds_per_frame: float = Form(2.0),
+    frame_durations: str | None = Form(None),
     frames: list[UploadFile] = File(...),
 ) -> Response:
     if not frames:
@@ -31,7 +33,15 @@ async def compile_video(
             frame_paths.append(dest)
 
         output = tmp_dir / "output.mp4"
-        compile_frames_to_mp4(frame_paths, seconds_per_frame, output)
+        durations: list[float] | None = None
+        if frame_durations:
+            try:
+                parsed = json.loads(frame_durations)
+                if isinstance(parsed, list) and len(parsed) == len(frame_paths):
+                    durations = [float(d) for d in parsed]
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+        compile_frames_to_mp4(frame_paths, seconds_per_frame, output, durations)
         data = output.read_bytes()
         return Response(
             content=data,

@@ -25,8 +25,8 @@ export interface DivisionMarker {
   crop: DivisionCropRect;
 }
 
-export const DEFAULT_CITY_MARKER_SIZE = 8;
-export const DEFAULT_DIVISION_MARKER_SIZE = 48;
+export const DEFAULT_CITY_MARKER_SIZE = 12;
+export const DEFAULT_DIVISION_MARKER_SIZE = 28;
 
 export interface PaletteColor {
   id: string;

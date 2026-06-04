@@ -7,7 +7,9 @@ from app.models.project import (
     AssetFrameState,
     AssetTarget,
     CityMarker,
+    CountryTerritory,
     DivisionMarker,
+    FrameAnnotations,
     FrameDuplicateOptions,
     ProjectBody,
     TimelineEntry,
@@ -27,6 +29,12 @@ from app.services.export_schema import (
 )
 
 PolygonRing = list[list[float]]
+
+
+def with_countries(
+    annotations: FrameAnnotations, countries: list[CountryTerritory]
+) -> FrameAnnotations:
+    return annotations.model_copy(update={"countries": countries})
 
 
 def is_blank_asset_key(filename: str) -> bool:
@@ -140,7 +148,6 @@ def get_next_map_filename(
 
 
 def merge_carried_territories(prev: AssetFrameState, next_state: AssetFrameState) -> AssetFrameState:
-    from app.models.project import FrameAnnotations
     from app.services.clone import clone_country
 
     existing_factions = {c.factionId for c in next_state.annotations.countries}
@@ -151,8 +158,8 @@ def merge_carried_territories(prev: AssetFrameState, next_state: AssetFrameState
     ]
     return next_state.model_copy(
         update={
-            "annotations": FrameAnnotations(
-                countries=[*carried, *next_state.annotations.countries]
+            "annotations": next_state.annotations.model_copy(
+                update={"countries": [*carried, *next_state.annotations.countries]}
             )
         }
     )
@@ -172,16 +179,17 @@ def add_territory_region(
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": {
-                    "countries": apply_territory_transfer(
+                "annotations": with_countries(
+                    s.annotations,
+                    apply_territory_transfer(
                         s.annotations.countries,
                         region,
                         faction_id,
                         faction_name,
                         color,
                         target_country_id,
-                    )
-                }
+                    ),
+                )
             }
         ),
     )
@@ -201,11 +209,12 @@ def claim_anchor(
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": {
-                    "countries": claim_anchor_at_point(
+                "annotations": with_countries(
+                    s.annotations,
+                    claim_anchor_at_point(
                         s.annotations.countries, country_id, x, y, epsilon
-                    )
-                }
+                    ),
+                )
             }
         ),
     )
@@ -224,14 +233,15 @@ def remove_territory_vertex(
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": {
-                    "countries": remove_vertex_from_country(
+                "annotations": with_countries(
+                    s.annotations,
+                    remove_vertex_from_country(
                         s.annotations.countries,
                         country_id,
                         ring_index,
                         vertex_index,
-                    )
-                }
+                    ),
+                )
             }
         ),
     )
@@ -252,16 +262,17 @@ def move_territory_vertex(
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": {
-                    "countries": move_vertex_on_country(
+                "annotations": with_countries(
+                    s.annotations,
+                    move_vertex_on_country(
                         s.annotations.countries,
                         country_id,
                         ring_index,
                         vertex_index,
                         x,
                         y,
-                    )
-                }
+                    ),
+                )
             }
         ),
     )
@@ -472,7 +483,9 @@ def update_faction_metadata(
                 else:
                     countries.append(c)
             new_copies.append(
-                copy.model_copy(update={"annotations": {"countries": countries}})
+                copy.model_copy(
+                    update={"annotations": with_countries(copy.annotations, countries)}
+                )
             )
         assets[filename] = new_copies
     return project.model_copy(update={"palette": palette, "assets": assets})

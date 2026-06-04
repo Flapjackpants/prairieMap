@@ -6,10 +6,14 @@ import type { ExportFrameSnapshot } from '../components/canvas/ExportFrameStage'
 import { useProject } from '../context/ProjectContext';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { isBlankAssetKey } from '../types/project';
-import { citiesForSegment, interpolateDivisions } from '../utils/markerInterpolation';
+import {
+  citiesForSegment,
+  easeInOutCubic,
+  interpolateDivisions,
+  segmentSubstepCount,
+} from '../utils/markerInterpolation';
 
 const MAX_EXPORT_DIMENSION = 1920;
-const MOTION_SUBSTEPS = 12;
 
 function loadImage(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -43,7 +47,10 @@ export function useVideoExport() {
   const abortRef = useRef(false);
 
   const runExport = useCallback(
-    async (secondsPerFrame = DEFAULT_SECONDS_PER_FRAME) => {
+    async (
+      secondsPerFrame = DEFAULT_SECONDS_PER_FRAME,
+      divisionMotionFps = 24,
+    ) => {
       const { timeline } = state;
       if (timeline.length === 0) {
         setError('No frames in timeline');
@@ -57,6 +64,7 @@ export function useVideoExport() {
 
       const savedIndex = state.currentTimelineIndex;
       const blobs: Blob[] = [];
+      const frameDurations: number[] = [];
       let exportW = 0;
       let exportH = 0;
 
@@ -126,10 +134,21 @@ export function useVideoExport() {
           };
         };
 
-        const totalCaptures =
-          exportableIndices.length <= 1
-            ? 1
-            : (exportableIndices.length - 1) * MOTION_SUBSTEPS;
+        let totalCaptures = 0;
+        if (exportableIndices.length === 1) {
+          totalCaptures = 1;
+        } else {
+          for (let j = 0; j < exportableIndices.length - 1; j++) {
+            const from = resolveTimelineEntry(state, exportableIndices[j])!;
+            const to = resolveTimelineEntry(state, exportableIndices[j + 1])!;
+            totalCaptures += segmentSubstepCount(
+              secondsPerFrame,
+              divisionMotionFps,
+              from.frameData.annotations.divisions,
+              to.frameData.annotations.divisions,
+            );
+          }
+        }
         let captureCount = 0;
 
         if (exportableIndices.length === 1) {
@@ -140,15 +159,24 @@ export function useVideoExport() {
             resolved.frameData.annotations.divisions,
           );
           blobs.push(await captureSnapshot(snap));
+          frameDurations.push(secondsPerFrame);
           captureCount = 1;
         } else {
           for (let j = 0; j < exportableIndices.length - 1; j++) {
             if (abortRef.current) break;
             const from = resolveTimelineEntry(state, exportableIndices[j])!;
             const to = resolveTimelineEntry(state, exportableIndices[j + 1])!;
-            for (let k = 0; k < MOTION_SUBSTEPS; k++) {
+            const substeps = segmentSubstepCount(
+              secondsPerFrame,
+              divisionMotionFps,
+              from.frameData.annotations.divisions,
+              to.frameData.annotations.divisions,
+            );
+            const subDuration = secondsPerFrame / substeps;
+            for (let k = 0; k < substeps; k++) {
               if (abortRef.current) break;
-              const t = (k + 1) / MOTION_SUBSTEPS;
+              const linear = (k + 1) / substeps;
+              const t = easeInOutCubic(linear);
               const citiesSeg = citiesForSegment(
                 from.frameData.annotations.cities,
                 to.frameData.annotations.cities,
@@ -161,6 +189,7 @@ export function useVideoExport() {
               );
               const snap = await buildSnap(to, citiesSeg, divsSeg);
               blobs.push(await captureSnapshot(snap));
+              frameDurations.push(subDuration);
               captureCount += 1;
               setProgress(Math.round((captureCount / totalCaptures) * 90));
             }
@@ -173,11 +202,7 @@ export function useVideoExport() {
         }
 
         setProgress(95);
-        const frameDuration =
-          exportableIndices.length <= 1
-            ? secondsPerFrame
-            : secondsPerFrame / MOTION_SUBSTEPS;
-        const mp4 = await compileVideo(blobs, frameDuration);
+        const mp4 = await compileVideo(blobs, secondsPerFrame, frameDurations);
         const url = URL.createObjectURL(mp4);
         const a = document.createElement('a');
         a.href = url;

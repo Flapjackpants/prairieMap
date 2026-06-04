@@ -66,6 +66,8 @@ export function InfoBoard() {
               />
             </section>
 
+            <MarkersPanel />
+
             <section className="flex min-h-0 flex-1 flex-col">
               <label className="mb-1 block font-mono text-[9px] tracking-widest text-accent-cyan uppercase">
                 :: Event_Log [MD] ::
@@ -172,7 +174,6 @@ export function InfoBoard() {
               </ul>
             </section>
 
-            <MarkersPanel />
             <FactionManager />
           </>
         )}

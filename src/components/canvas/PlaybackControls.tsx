@@ -40,8 +40,10 @@ export function PlaybackControls() {
           isExporting={video.isExporting}
           progress={video.progress}
           error={video.error}
-          onConfirm={(seconds) => {
-            void video.runExport(seconds).finally(() => setShowExportModal(false));
+          onConfirm={(seconds, divisionMotionFps) => {
+            void video
+              .runExport(seconds, divisionMotionFps)
+              .finally(() => setShowExportModal(false));
           }}
           onCancel={() => {
             video.cancel();

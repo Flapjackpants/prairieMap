@@ -10,6 +10,9 @@ export function MarkersPanel() {
     setTool,
     removeCityMarker,
     removeDivisionMarker,
+    copyMarkers,
+    pasteMarkers,
+    hasMarkerClipboard,
   } = useProject();
   const [expanded, setExpanded] = useState(true);
 
@@ -35,71 +38,95 @@ export function MarkersPanel() {
         </span>
       </button>
       {expanded && (
-        <div className="space-y-2 border-t border-border/60 px-2 py-2">
+        <div className="space-y-1.5 border-t border-border/60 px-2 py-2">
           <div>
             <span className="font-mono text-[8px] tracking-widest text-text-muted uppercase">
               Cities ({cities.length})
             </span>
-            <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
-              {cities.map((c) => (
-                <li key={c.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className={`min-w-0 flex-1 truncate text-left font-mono text-[10px] ${
-                      state.selectedMarkerId === c.id ? 'text-accent-cyan' : 'text-text-primary'
-                    }`}
-                    onClick={() => {
-                      setTool('select');
-                      setSelectedMarker(c.id, 'city');
-                    }}
-                  >
-                    {c.name}
-                  </button>
-                  <button
-                    type="button"
-                    className="font-mono text-[9px] text-accent-crimson"
-                    onClick={() => void removeCityMarker(c.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {cities.length === 0 ? (
+              <p className="mt-0.5 font-mono text-[9px] text-text-muted">No cities on this frame</p>
+            ) : (
+              <ul className="mt-0.5 max-h-24 space-y-0.5 overflow-y-auto">
+                {cities.map((c) => (
+                  <li key={c.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className={`min-w-0 flex-1 truncate text-left font-mono text-[10px] ${
+                        state.selectedMarkerId === c.id ? 'text-accent-cyan' : 'text-text-primary'
+                      }`}
+                      onClick={() => {
+                        setTool('select');
+                        setSelectedMarker(c.id, 'city');
+                      }}
+                    >
+                      {c.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="font-mono text-[9px] text-accent-crimson"
+                      onClick={() => void removeCityMarker(c.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           <div>
             <span className="font-mono text-[8px] tracking-widest text-text-muted uppercase">
               Divisions ({divisions.length})
             </span>
-            <ul className="mt-1 max-h-24 space-y-0.5 overflow-y-auto">
-              {divisions.map((d) => (
-                <li key={d.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className={`min-w-0 flex-1 truncate text-left font-mono text-[10px] ${
-                      state.selectedMarkerId === d.id ? 'text-accent-cyan' : 'text-text-primary'
-                    }`}
-                    onClick={() => {
-                      setTool('select');
-                      setSelectedMarker(d.id, 'division');
-                    }}
-                  >
-                    <Shield className="mr-0.5 inline h-2.5 w-2.5" />
-                    {d.sourceFilename.split('/').pop()}
-                  </button>
-                  <button
-                    type="button"
-                    className="font-mono text-[9px] text-accent-crimson"
-                    onClick={() => void removeDivisionMarker(d.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+            {divisions.length === 0 ? (
+              <p className="mt-0.5 font-mono text-[9px] text-text-muted">No divisions on this frame</p>
+            ) : (
+              <ul className="mt-0.5 max-h-24 space-y-0.5 overflow-y-auto">
+                {divisions.map((d) => (
+                  <li key={d.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      className={`min-w-0 flex-1 truncate text-left font-mono text-[10px] ${
+                        state.selectedMarkerId === d.id ? 'text-accent-cyan' : 'text-text-primary'
+                      }`}
+                      onClick={() => {
+                        setTool('select');
+                        setSelectedMarker(d.id, 'division');
+                      }}
+                    >
+                      <Shield className="mr-0.5 inline h-2.5 w-2.5" />
+                      {d.sourceFilename.split('/').pop()}
+                    </button>
+                    <button
+                      type="button"
+                      className="font-mono text-[9px] text-accent-crimson"
+                      onClick={() => void removeDivisionMarker(d.id)}
+                    >
+                      ×
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          <p className="font-mono text-[8px] leading-relaxed text-text-muted">
-            City / Division tools to place · Select tool to drag · Double-click division in list to
-            edit crop via toolbar
+          <div className="flex gap-1 pt-0.5">
+            <button
+              type="button"
+              className="btn-icon h-6 flex-1 font-mono text-[8px] tracking-wider"
+              onClick={copyMarkers}
+            >
+              COPY
+            </button>
+            <button
+              type="button"
+              className="btn-icon h-6 flex-1 font-mono text-[8px] tracking-wider"
+              disabled={!hasMarkerClipboard}
+              onClick={() => void pasteMarkers()}
+            >
+              PASTE
+            </button>
+          </div>
+          <p className="font-mono text-[8px] leading-snug text-text-muted">
+            ⌘C copy (selected or all) · ⌘V paste on frame
           </p>
         </div>
       )}

@@ -1,13 +1,16 @@
 import { Film, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { DEFAULT_SECONDS_PER_FRAME } from '../../constants/playback';
+import {
+  DEFAULT_DIVISION_MOTION_FPS,
+  DEFAULT_SECONDS_PER_FRAME,
+} from '../../constants/playback';
 
 interface ExportVideoModalProps {
   frameCount: number;
   isExporting: boolean;
   progress: number;
   error: string | null;
-  onConfirm: (secondsPerFrame: number) => void;
+  onConfirm: (secondsPerFrame: number, divisionMotionFps: number) => void;
   onCancel: () => void;
   onClose: () => void;
 }
@@ -22,6 +25,7 @@ export function ExportVideoModal({
   onClose,
 }: ExportVideoModalProps) {
   const [secondsPerFrame, setSecondsPerFrame] = useState(DEFAULT_SECONDS_PER_FRAME);
+  const [divisionMotionFps, setDivisionMotionFps] = useState(DEFAULT_DIVISION_MOTION_FPS);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +76,26 @@ export function ExportVideoModal({
             />
           </label>
 
+          <label className="block">
+            <span className="mb-1 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
+              Division motion FPS
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={120}
+              step={1}
+              disabled={isExporting}
+              className="input-field"
+              value={divisionMotionFps}
+              onChange={(e) => setDivisionMotionFps(Number(e.target.value))}
+            />
+            <p className="mt-1 font-mono text-[8px] leading-relaxed text-text-muted">
+              Subframes per second between timeline frames when a division moves; static gaps use
+              one hold frame.
+            </p>
+          </label>
+
           {isExporting && (
             <div>
               <div className="mb-1 h-2 border border-metal-shadow bg-surface">
@@ -103,7 +127,7 @@ export function ExportVideoModal({
                 type="button"
                 className="btn-primary"
                 disabled={frameCount === 0}
-                onClick={() => onConfirm(secondsPerFrame)}
+                onClick={() => onConfirm(secondsPerFrame, divisionMotionFps)}
               >
                 Compile
               </button>
