@@ -106,9 +106,10 @@ export function useVideoExport() {
             image,
             countries: resolved.frameData.annotations.countries,
             dateTitle: resolved.frameData.info.dateTitle,
+            eventLog: resolved.frameData.info.description,
           });
 
-          await waitFrames(3);
+          await waitFrames(4);
           const stage = stageRef.current;
           if (!stage) throw new Error('Export stage not ready');
 

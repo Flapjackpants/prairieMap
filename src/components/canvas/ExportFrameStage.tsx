@@ -2,6 +2,10 @@ import { useEffect, useRef } from 'react';
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from 'react-konva';
 import type Konva from 'konva';
 import type { CountryTerritory } from '../../types/project';
+import {
+  estimateEventLogLines,
+  formatEventLogForExport,
+} from '../../utils/formatEventLogExport';
 import { TerritoryLayer } from './TerritoryLayer';
 
 export interface ExportFrameSnapshot {
@@ -12,11 +16,45 @@ export interface ExportFrameSnapshot {
   image: HTMLImageElement | null;
   countries: CountryTerritory[];
   dateTitle: string;
+  eventLog: string;
 }
 
 interface ExportFrameStageProps {
   snapshot: ExportFrameSnapshot | null;
   stageRef: React.RefObject<Konva.Stage | null>;
+}
+
+const DOSSIER_FONT = 'JetBrains Mono, monospace';
+const BODY_FONT_SIZE = 20;
+const DATE_FONT_SIZE = 26;
+const HEADER_FONT_SIZE = 14;
+const PANEL_PADDING = 20;
+
+function dossierPanelWidth(
+  stageWidth: number,
+  dateTitle: string,
+  eventLog: string,
+): number {
+  const eventBody = formatEventLogForExport(eventLog);
+  const hasDate = Boolean(dateTitle.trim());
+  const hasLog = Boolean(eventBody);
+  if (!hasDate && !hasLog) return 0;
+
+  const panelFraction = 0.4;
+  const minPanel = 100;
+  const maxPanel = Math.round(stageWidth * 0.48);
+  const innerWidth = Math.max(200, Math.round(stageWidth * panelFraction) - PANEL_PADDING * 2);
+  const charsPerLine = Math.max(12, Math.floor(innerWidth / (BODY_FONT_SIZE * 0.55)));
+  const bodyLines = estimateEventLogLines(eventBody, charsPerLine);
+
+  const linePx = BODY_FONT_SIZE * 1.35;
+  const wanted =
+    PANEL_PADDING * 2 +
+    (hasLog ? 28 : 0) +
+    (hasDate ? DATE_FONT_SIZE + 16 : 0) +
+    bodyLines * linePx;
+
+  return Math.min(maxPanel, Math.max(minPanel, Math.round(stageWidth * panelFraction), wanted));
 }
 
 export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) {
@@ -28,13 +66,23 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
 
   if (!snapshot) return null;
 
+  const dateLabel = snapshot.dateTitle.trim().toUpperCase();
+  const eventBody = formatEventLogForExport(snapshot.eventLog);
+  const panelW = dossierPanelWidth(snapshot.width, dateLabel, eventBody);
+  const mapAreaW = snapshot.width - panelW;
+  const panelX = mapAreaW;
+
   const scale = Math.min(
-    snapshot.width / snapshot.mapWidth,
+    mapAreaW / snapshot.mapWidth,
     snapshot.height / snapshot.mapHeight,
   );
-  const offsetX = (snapshot.width - snapshot.mapWidth * scale) / 2;
+  const offsetX = (mapAreaW - snapshot.mapWidth * scale) / 2;
   const offsetY = (snapshot.height - snapshot.mapHeight * scale) / 2;
-  const dateLabel = snapshot.dateTitle.trim().toUpperCase();
+
+  const textWidth = panelW - PANEL_PADDING * 2;
+  const headerY = PANEL_PADDING;
+  const dateY = headerY + (eventBody ? 30 : 0);
+  const bodyY = dateY + (dateLabel ? DATE_FONT_SIZE + 20 : 0);
 
   return (
     <div className="pointer-events-none fixed -left-[10000px] top-0 opacity-0" aria-hidden>
@@ -78,25 +126,66 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
               onRemoveDraftAnchor={() => {}}
             />
           </Group>
-          {dateLabel && (
+
+          {panelW > 0 && (
             <>
               <Rect
-                x={8}
-                y={snapshot.height - 36}
-                width={Math.min(snapshot.width - 16, dateLabel.length * 9 + 24)}
-                height={28}
-                fill="rgba(20,22,24,0.85)"
+                x={panelX}
+                y={0}
+                width={panelW}
+                height={snapshot.height}
+                fill="rgba(16,18,20,0.94)"
                 listening={false}
               />
-              <Text
-                x={16}
-                y={snapshot.height - 30}
-                text={dateLabel}
-                fontSize={14}
+              <Rect
+                x={panelX}
+                y={0}
+                width={2}
+                height={snapshot.height}
                 fill="#00e5ff"
-                fontFamily="JetBrains Mono, monospace"
+                opacity={0.4}
                 listening={false}
               />
+              {eventBody && (
+                <Text
+                  x={panelX + PANEL_PADDING}
+                  y={headerY}
+                  text=":: EVENT_LOG ::"
+                  fontSize={HEADER_FONT_SIZE}
+                  fill="#8a8d94"
+                  fontFamily={DOSSIER_FONT}
+                  letterSpacing={1.5}
+                  listening={false}
+                />
+              )}
+              {dateLabel && (
+                <Text
+                  x={panelX + PANEL_PADDING}
+                  y={dateY}
+                  width={textWidth}
+                  text={dateLabel}
+                  fontSize={DATE_FONT_SIZE}
+                  fill="#ff6b00"
+                  fontStyle="bold"
+                  fontFamily={DOSSIER_FONT}
+                  wrap="word"
+                  listening={false}
+                />
+              )}
+              {eventBody && (
+                <Text
+                  x={panelX + PANEL_PADDING}
+                  y={bodyY}
+                  width={textWidth}
+                  text={eventBody}
+                  fontSize={BODY_FONT_SIZE}
+                  lineHeight={1.35}
+                  fill="rgba(0,229,255,0.95)"
+                  fontFamily={DOSSIER_FONT}
+                  wrap="word"
+                  listening={false}
+                />
+              )}
             </>
           )}
         </Layer>
