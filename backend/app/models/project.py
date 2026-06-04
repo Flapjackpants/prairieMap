@@ -197,6 +197,15 @@ class MoveVertexRequest(BaseModel):
     y: float
 
 
+class ConvertTerritoryVariantRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    countryId: str
+    ringIndex: int
+    fromVariant: str
+    toVariant: str
+
+
 class ProjectMutationResponse(BaseModel):
     project: ProjectBody
     projectId: str | None = None

@@ -3,6 +3,19 @@ export type ToolMode = 'pan' | 'areaSelect' | 'select';
 /** Primary fill updates labels; extend adds land with lighter fill only. */
 export type TerritoryDrawMode = 'primary' | 'extend';
 
+export type TerritoryVariant = 'primary' | 'extension';
+
+export interface SelectedTerritory {
+  countryId: string;
+  ringIndex: number;
+  variant: TerritoryVariant;
+}
+
+export interface TerritoryDrawColors {
+  primary: string;
+  extension: string;
+}
+
 export interface PaletteColor {
   id: string;
   name: string;
@@ -152,7 +165,10 @@ export interface ProjectState {
   carryOverLabels: boolean;
   viewport: ViewportState;
   selectedCountryId: string | null;
+  selectedTerritory: SelectedTerritory | null;
   territoryDrawMode: TerritoryDrawMode;
+  /** Set only when user clicks PRI/EXT; draft preview does not follow map selection. */
+  drawColors: TerritoryDrawColors | null;
 }
 
 export interface ProjectExportV2 {

@@ -6,7 +6,6 @@ import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { normalizeClosedRing } from '../../utils/territoryGeometry';
 import { SNAP_THRESHOLD_PX } from '../../types/project';
-import { extensionColorForCountry } from '../../utils/colorUtils';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
@@ -46,11 +45,12 @@ export function MapCanvas() {
     claimAnchor,
     removeTerritoryVertex,
     moveTerritoryVertex,
-    setSelectedCountry,
+    setSelectedTerritory,
     setFileCanvasSize,
   } = useProject();
 
-  const { tool, viewport, selectedCountryId, activeColorId, territoryDrawMode } = state;
+  const { tool, viewport, selectedCountryId, activeColorId, territoryDrawMode, drawColors } =
+    state;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -68,11 +68,11 @@ export function MapCanvas() {
   );
   const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
-  const selectedCountry = countries.find((c) => c.id === selectedCountryId);
-  const draftColor =
-    territoryDrawMode === 'extend' && selectedCountry
-      ? extensionColorForCountry(selectedCountry.color, selectedCountry.extensionColor)
-      : selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
+  const draftColor = drawColors
+    ? territoryDrawMode === 'extend'
+      ? drawColors.extension
+      : drawColors.primary
+    : activeColor?.hex ?? '#00e5ff';
 
   /** Konva left-drag pan (PAN tool or Space). Middle-click uses manual viewport updates. */
   const isKonvaPanDrag = tool === 'pan' || spaceHeld;
@@ -493,13 +493,17 @@ export function MapCanvas() {
                 <TerritoryLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
+                  selectedTerritory={state.selectedTerritory}
                   activeFactionId={activeColorId}
                   showAnchorHandles={showAnchorHandles}
+                  ringSelectable={isSelect}
                   draftPoints={draftPoints}
                   draftColor={draftColor}
                   cursorPoint={cursorPoint}
                   snapTarget={snapTarget}
-                  onSelectCountry={setSelectedCountry}
+                  onSelectRing={(countryId, ringIndex, variant) => {
+                    setSelectedTerritory({ countryId, ringIndex, variant });
+                  }}
                   onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>

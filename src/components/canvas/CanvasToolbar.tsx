@@ -17,12 +17,20 @@ export function CanvasToolbar() {
     toggleCarryLabels,
     addPaletteColor,
     deleteCountry,
-    setSelectedCountry,
-    setTerritoryDrawMode,
+    setSelectedTerritory,
+    applyTerritoryDrawMode,
     currentFrame,
   } = useProject();
-  const { tool, palette, activeColorId, carryOverLabels, selectedCountryId, territoryDrawMode } =
-    state;
+  const {
+    tool,
+    palette,
+    activeColorId,
+    carryOverLabels,
+    selectedCountryId,
+    selectedTerritory,
+    territoryDrawMode,
+    drawColors,
+  } = state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
   const selectedCountry = selectedCountryId
     ? currentFrame?.frameData.annotations.countries.find((c) => c.id === selectedCountryId)
@@ -84,15 +92,25 @@ export function CanvasToolbar() {
             ).map(({ mode, label, title }) => {
               const isExtend = mode === 'extend';
               const bg = isExtend
-                ? extensionColorForCountry(selectedCountry.color, selectedCountry.extensionColor)
-                : selectedCountry.color;
+                ? (drawColors?.extension ??
+                  extensionColorForCountry(selectedCountry.color, selectedCountry.extensionColor))
+                : (drawColors?.primary ?? selectedCountry.color);
               const active = territoryDrawMode === mode;
+              const canConvert =
+                selectedTerritory &&
+                selectedTerritory.countryId === selectedCountry.id &&
+                ((mode === 'primary' && selectedTerritory.variant === 'extension') ||
+                  (mode === 'extend' && selectedTerritory.variant === 'primary'));
               return (
                 <button
                   key={mode}
                   type="button"
-                  title={title}
-                  onClick={() => setTerritoryDrawMode(mode)}
+                  title={
+                    canConvert
+                      ? `${title} — convert selected land to ${label}`
+                      : title
+                  }
+                  onClick={() => void applyTerritoryDrawMode(mode)}
                   className={`relative h-7 min-w-[2rem] border-2 px-1 font-mono text-[8px] font-bold tracking-wider uppercase transition-all ${
                     active ? 'border-accent-cyan scale-105 neon-glow-cyan' : 'border-metal-shadow'
                   }`}
@@ -142,7 +160,7 @@ export function CanvasToolbar() {
             onClick={() => {
               if (confirm('Delete this country and all its regions?')) {
                 deleteCountry(selectedCountryId);
-                setSelectedCountry(null);
+                setSelectedTerritory(null);
               }
             }}
           >
@@ -158,7 +176,7 @@ export function CanvasToolbar() {
       )}
       {tool === 'select' && activeFaction && (
         <p className="max-w-md border border-accent-orange/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-orange uppercase shadow-lg">
-          Anchors: click=remove from selected nation · Drag=move · Alt+click=delete
+          Click land to select · PRI/EXT converts selection · Draw color set by PRI/EXT only
         </p>
       )}
     </div>

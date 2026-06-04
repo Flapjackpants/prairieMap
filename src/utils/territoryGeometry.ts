@@ -5,6 +5,20 @@ export function ringToFlatPoints(ring: PolygonRing): number[] {
   return ring.flatMap(([x, y]) => [x, y]);
 }
 
+export function pointInRing(x: number, y: number, ring: PolygonRing): boolean {
+  let inside = false;
+  const n = ring.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y)) {
+      const xinters = ((xj - xi) * (y - yi)) / (yj - yi + 1e-12) + xi;
+      if (x < xinters) inside = !inside;
+    }
+  }
+  return inside;
+}
+
 export function polygonArea(ring: PolygonRing): number {
   let area = 0;
   const n = ring.length;

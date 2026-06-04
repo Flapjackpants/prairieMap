@@ -1,6 +1,7 @@
 from app.services.geometry import (
     apply_territory_transfer,
     claim_anchor_at_point,
+    convert_territory_ring_variant,
     compute_curved_label_for_region,
     compute_region_labels,
     exterior_rings_only,
@@ -152,6 +153,65 @@ def test_extend_mode_preserves_labels_and_adds_extension_regions():
     assert out.regionLabels[0].model_dump() == label
     assert len(out.extensionRegions) >= 1
     assert out.extensionColor is not None
+
+
+def test_convert_ring_primary_to_extension_preserves_labels():
+    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    label = {"x": 50, "y": 50, "fontSize": 18, "letterSpacing": 8}
+    nation = CountryTerritory(
+        id="a",
+        factionId="f",
+        name="A",
+        color="#3366cc",
+        labelSettings=CountryLabelSettings(),
+        regionLabels=[label],
+        regions=[ring],
+        extensionRegions=[],
+    )
+    result = convert_territory_ring_variant([nation], "a", 0, "primary", "extension")
+    out = result[0]
+    assert len(out.regions) == 0
+    assert len(out.extensionRegions) == 1
+    assert len(out.regionLabels) == 0
+
+
+def test_convert_extension_to_primary_unions_touching_primary():
+    shared = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    primary = [[100, 0], [200, 0], [200, 100], [100, 100]]
+    extension = [[50, 50], [150, 50], [150, 150], [50, 150]]
+    nation = CountryTerritory(
+        id="a",
+        factionId="f",
+        name="A",
+        color="#3366cc",
+        labelSettings=CountryLabelSettings(),
+        regionLabels=[{"x": 50, "y": 50, "fontSize": 18, "letterSpacing": 8}],
+        regions=[shared, primary],
+        extensionRegions=[extension],
+    )
+    result = convert_territory_ring_variant([nation], "a", 0, "extension", "primary")
+    out = result[0]
+    assert len(out.extensionRegions) == 0
+    assert len(out.regions) <= 2
+
+
+def test_convert_ring_extension_to_primary_recomputes_labels():
+    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    nation = CountryTerritory(
+        id="a",
+        factionId="f",
+        name="A",
+        color="#3366cc",
+        labelSettings=CountryLabelSettings(),
+        regionLabels=[{"x": 1, "y": 1, "fontSize": 10, "letterSpacing": 4}],
+        regions=[],
+        extensionRegions=[ring],
+    )
+    result = convert_territory_ring_variant([nation], "a", 0, "extension", "primary")
+    out = result[0]
+    assert len(out.regions) == 1
+    assert len(out.extensionRegions) == 0
+    assert len(out.regionLabels) >= 1
 
 
 def test_claim_anchor_removes_only_from_selected_country():

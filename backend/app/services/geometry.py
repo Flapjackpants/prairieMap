@@ -107,6 +107,51 @@ def remove_vertex_from_country(
     return updated
 
 
+def convert_territory_ring_variant(
+    countries: list[CountryTerritory],
+    country_id: str,
+    ring_index: int,
+    from_variant: str,
+    to_variant: str,
+) -> list[CountryTerritory]:
+    if from_variant == to_variant:
+        return countries
+    updated: list[CountryTerritory] = []
+    for country in countries:
+        if country.id != country_id:
+            updated.append(country)
+            continue
+        regions = [[list(pt) for pt in ring] for ring in country.regions]
+        extension_regions = [[list(pt) for pt in ring] for ring in country.extensionRegions]
+        if from_variant == "primary":
+            if ring_index < 0 or ring_index >= len(regions):
+                updated.append(country)
+                continue
+            ring = regions.pop(ring_index)
+            extension_regions = union_all_regions([*extension_regions, ring])
+            if not regions and not extension_regions:
+                continue
+            patched = country.model_copy(
+                update={"regions": regions, "extensionRegions": extension_regions}
+            )
+            updated.append(recompute_country_labels(patched))
+        elif from_variant == "extension":
+            if ring_index < 0 or ring_index >= len(extension_regions):
+                updated.append(country)
+                continue
+            ring = extension_regions.pop(ring_index)
+            regions = union_all_regions([*regions, ring])
+            if not regions:
+                continue
+            patched = country.model_copy(
+                update={"regions": regions, "extensionRegions": extension_regions}
+            )
+            updated.append(recompute_country_labels(patched))
+        else:
+            updated.append(country)
+    return updated
+
+
 def move_vertex_on_country(
     countries: list[CountryTerritory],
     country_id: str,

@@ -108,6 +108,20 @@ export async function removeTerritoryVertex(params: {
   });
 }
 
+export async function convertTerritoryVariant(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  countryId: string;
+  ringIndex: number;
+  fromVariant: 'primary' | 'extension';
+  toVariant: 'primary' | 'extension';
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/convert-territory-variant', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function moveTerritoryVertex(params: {
   project: ProjectBody;
   target: { filename: string; copyIndex: number };

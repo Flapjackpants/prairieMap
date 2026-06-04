@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import * as api from '../api/backend';
+import { extensionColorForCountry } from '../utils/colorUtils';
 import { ApiError, apiHealth } from '../api/client';
 import {
   DEFAULT_PALETTE,
@@ -21,7 +22,10 @@ import {
   type ProjectExport,
   type ProjectState,
   type ResolvedFrame,
+  type SelectedTerritory,
+  type TerritoryDrawColors,
   type TerritoryDrawMode,
+  type TerritoryVariant,
   type ToolMode,
   type ViewportState,
 } from '../types/project';
@@ -57,8 +61,8 @@ type UiAction =
   | { type: 'SET_ACTIVE_COLOR'; colorId: string }
   | { type: 'TOGGLE_CARRY_LABELS' }
   | { type: 'SET_VIEWPORT'; viewport: ViewportState }
-  | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
-  | { type: 'SET_TERRITORY_DRAW_MODE'; mode: TerritoryDrawMode }
+  | { type: 'SET_SELECTED_TERRITORY'; territory: SelectedTerritory | null }
+  | { type: 'APPLY_TERRITORY_DRAW_MODE'; mode: TerritoryDrawMode; drawColors: TerritoryDrawColors }
   | { type: 'SET_FILE_CANVAS_SIZE'; filename: string; width: number; height: number }
   | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
   | { type: 'CLEAR_PROJECT' };
@@ -75,7 +79,9 @@ const initialState: ProjectState = {
   carryOverLabels: true,
   viewport: { scale: 1, x: 0, y: 0 },
   selectedCountryId: null,
+  selectedTerritory: null,
   territoryDrawMode: 'primary',
+  drawColors: null,
 };
 
 function uiReducer(state: ProjectState, action: UiAction): ProjectState {
@@ -104,14 +110,18 @@ function uiReducer(state: ProjectState, action: UiAction): ProjectState {
       return { ...state, carryOverLabels: !state.carryOverLabels };
     case 'SET_VIEWPORT':
       return { ...state, viewport: action.viewport };
-    case 'SET_SELECTED_COUNTRY':
+    case 'SET_SELECTED_TERRITORY':
       return {
         ...state,
-        selectedCountryId: action.countryId,
-        territoryDrawMode: action.countryId ? state.territoryDrawMode : 'primary',
+        selectedTerritory: action.territory,
+        selectedCountryId: action.territory?.countryId ?? null,
       };
-    case 'SET_TERRITORY_DRAW_MODE':
-      return { ...state, territoryDrawMode: action.mode };
+    case 'APPLY_TERRITORY_DRAW_MODE':
+      return {
+        ...state,
+        territoryDrawMode: action.mode,
+        drawColors: action.drawColors,
+      };
     case 'SET_FILE_CANVAS_SIZE': {
       const entry = state.fileRegistry[action.filename];
       if (
@@ -178,8 +188,8 @@ interface ProjectContextValue {
     y: number,
   ) => Promise<void>;
   deleteCountry: (countryId: string) => Promise<void>;
-  setSelectedCountry: (countryId: string | null) => void;
-  setTerritoryDrawMode: (mode: TerritoryDrawMode) => void;
+  setSelectedTerritory: (territory: SelectedTerritory | null) => void;
+  applyTerritoryDrawMode: (mode: TerritoryDrawMode) => Promise<void>;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => void;
   updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
@@ -577,19 +587,74 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }),
       );
       if (stateRef.current.selectedCountryId === countryId) {
-        dispatch({ type: 'SET_SELECTED_COUNTRY', countryId: null });
+        dispatch({ type: 'SET_SELECTED_TERRITORY', territory: null });
       }
     },
     [currentFrame, runMutation],
   );
 
-  const setSelectedCountry = useCallback((countryId: string | null) => {
-    dispatch({ type: 'SET_SELECTED_COUNTRY', countryId });
+  const setSelectedTerritory = useCallback((territory: SelectedTerritory | null) => {
+    dispatch({ type: 'SET_SELECTED_TERRITORY', territory });
   }, []);
 
-  const setTerritoryDrawMode = useCallback((mode: TerritoryDrawMode) => {
-    dispatch({ type: 'SET_TERRITORY_DRAW_MODE', mode });
-  }, []);
+  const applyTerritoryDrawMode = useCallback(
+    async (mode: TerritoryDrawMode) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      const selectedId = stateRef.current.selectedCountryId;
+      const selectedCountry = selectedId
+        ? frame?.frameData.annotations.countries.find((c) => c.id === selectedId)
+        : undefined;
+      const paletteFaction = stateRef.current.palette.find(
+        (p) => p.id === stateRef.current.activeColorId,
+      );
+      const primary =
+        selectedCountry?.color ?? paletteFaction?.hex ?? DEFAULT_PALETTE[0].hex;
+      const extension = extensionColorForCountry(
+        primary,
+        selectedCountry?.extensionColor,
+      );
+      const sel = stateRef.current.selectedTerritory;
+      dispatch({
+        type: 'APPLY_TERRITORY_DRAW_MODE',
+        mode,
+        drawColors: { primary, extension },
+      });
+
+      const targetVariant: TerritoryVariant = mode === 'extend' ? 'extension' : 'primary';
+      if (sel && sel.variant !== targetVariant) {
+        const target = currentTarget(currentFrame);
+        if (!target) return;
+        await runMutation(() =>
+          api.convertTerritoryVariant({
+            project: toProjectBody(stateRef.current),
+            target,
+            countryId: sel.countryId,
+            ringIndex: sel.ringIndex,
+            fromVariant: sel.variant,
+            toVariant: targetVariant,
+          }),
+        );
+        const updatedFrame = resolveCurrentFrame(stateRef.current);
+        const updatedCountry = updatedFrame?.frameData.annotations.countries.find(
+          (c) => c.id === sel.countryId,
+        );
+        const rings =
+          targetVariant === 'extension'
+            ? updatedCountry?.extensionRegions ?? []
+            : updatedCountry?.regions ?? [];
+        const nextIndex = rings.length <= 1 ? 0 : Math.min(sel.ringIndex, rings.length - 1);
+        dispatch({
+          type: 'SET_SELECTED_TERRITORY',
+          territory: {
+            countryId: sel.countryId,
+            ringIndex: nextIndex,
+            variant: targetVariant,
+          },
+        });
+      }
+    },
+    [currentFrame, runMutation],
+  );
 
   const updateFrameInfo = useCallback(
     async (info: Partial<FrameInfo>) => {
@@ -729,8 +794,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeTerritoryVertex,
       moveTerritoryVertex,
       deleteCountry,
-      setSelectedCountry,
-      setTerritoryDrawMode,
+      setSelectedTerritory,
+      applyTerritoryDrawMode,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,
@@ -767,8 +832,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeTerritoryVertex,
       moveTerritoryVertex,
       deleteCountry,
-      setSelectedCountry,
-      setTerritoryDrawMode,
+      setSelectedTerritory,
+      applyTerritoryDrawMode,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,
