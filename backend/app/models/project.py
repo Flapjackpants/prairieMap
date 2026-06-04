@@ -184,6 +184,12 @@ class UpdateFactionMetadataRequest(BaseModel):
     hex: str | None = None
 
 
+class AddPaletteColorRequest(BaseModel):
+    project: ProjectBody
+    name: str
+    hex: str
+
+
 class UpdateFrameInfoRequest(BaseModel):
     project: ProjectBody
     target: AssetTarget

@@ -79,6 +79,17 @@ export async function updateFactionMetadata(params: {
   });
 }
 
+export async function addPaletteColor(params: {
+  project: ProjectBody;
+  name: string;
+  hex: string;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/add-palette-color', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function claimAnchor(params: {
   project: ProjectBody;
   target: { filename: string; copyIndex: number };

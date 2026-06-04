@@ -11,6 +11,7 @@ from app.models.project import (
     DivisionMarker,
     FrameAnnotations,
     FrameDuplicateOptions,
+    PaletteColor,
     ProjectBody,
     TimelineEntry,
 )
@@ -452,6 +453,11 @@ def init_from_filenames(filenames: list[str]) -> ProjectBody:
         timeline=create_timeline_from_files(filenames),
         currentTimelineIndex=0,
     )
+
+
+def add_palette_color(project: ProjectBody, name: str, hex_color: str) -> ProjectBody:
+    entry = PaletteColor(id=str(uuid.uuid4()), name=name.strip() or "New Nation", hex=hex_color)
+    return project.model_copy(update={"palette": [*project.palette, entry]})
 
 
 def update_faction_metadata(

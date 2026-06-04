@@ -163,6 +163,8 @@ export function MapCanvas() {
       }
       if (tool !== 'areaSelect' || !currentFrame) return;
 
+      if (isEditableTarget(e.target)) return;
+
       if (e.key === 'Enter') {
         e.preventDefault();
         closeDraftPolygon();

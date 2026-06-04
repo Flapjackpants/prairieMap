@@ -203,7 +203,7 @@ interface ProjectContextValue {
   pasteMarkers: () => Promise<void>;
   hasMarkerClipboard: boolean;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
-  addPaletteColor: (name: string, hex: string) => void;
+  addPaletteColor: (name: string, hex: string) => Promise<void>;
   updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
   exportProject: () => ProjectExport;
   importProject: (data: ProjectExport, files: File[]) => Promise<void>;
@@ -822,12 +822,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [currentFrame, runMutation],
   );
 
-  const addPaletteColor = useCallback((name: string, hex: string) => {
-    dispatch({
-      type: 'ADD_PALETTE_COLOR',
-      color: { id: uuidv4(), name, hex },
-    });
-  }, []);
+  const addPaletteColor = useCallback(
+    async (name: string, hex: string) => {
+      const prevIds = new Set(stateRef.current.palette.map((p) => p.id));
+      await runMutation(() =>
+        api.addPaletteColor({
+          project: toProjectBody(stateRef.current),
+          name,
+          hex,
+        }),
+      );
+      const added = stateRef.current.palette.find((p) => !prevIds.has(p.id));
+      if (added) {
+        dispatch({ type: 'SET_ACTIVE_COLOR', colorId: added.id });
+        if (stateRef.current.tool === 'pan') {
+          dispatch({ type: 'SET_TOOL', tool: 'areaSelect' });
+        }
+      }
+    },
+    [runMutation],
+  );
 
   const updateFactionMetadata = useCallback(
     async (factionId: string, patch: { name?: string; hex?: string }) => {

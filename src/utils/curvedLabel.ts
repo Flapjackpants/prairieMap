@@ -3,7 +3,8 @@ import { combinedBounds, polygonArea, polygonCentroid } from './territoryGeometr
 
 export const LABEL_MIN_FONT = 9;
 export const LABEL_MAX_FONT = 48;
-export const LETTER_SPACING_FACTOR = 0.80;
+export const LETTER_SPACING_FACTOR = 0.85;
+export const MIN_LETTER_STEP_FACTOR = 1.05;
 export const CHAR_WIDTH_FACTOR = 0.58;
 export const SPINE_LENGTH_FACTOR = 0.48;
 export const SPINE_MINOR_INSET = 0.38;
@@ -22,6 +23,11 @@ function clamp(n: number, min: number, max: number): number {
 
 export function defaultCharWidth(fontSize: number): number {
   return fontSize * CHAR_WIDTH_FACTOR;
+}
+
+/** Minimum arc distance between letter centers to avoid visual overlap. */
+export function minLetterStep(fontSize: number): number {
+  return defaultCharWidth(fontSize) * MIN_LETTER_STEP_FACTOR;
 }
 
 export function pointInRing(point: { x: number; y: number }, ring: PolygonRing): boolean {
@@ -178,7 +184,9 @@ export function scoreLabelLayout(
   glyphs: GlyphPlacement[],
   ownRing: PolygonRing,
   foreignRings: PolygonRing[],
+  spine: LabelSpine,
 ): number {
+  if (isSpineUpsideDown(spine)) return -1e6;
   let score = 0;
   for (const g of glyphs) {
     const pt = { x: g.x, y: g.y };
@@ -191,25 +199,36 @@ export function scoreLabelLayout(
   return score;
 }
 
+/** Fixed equal arc step for a font size (priority: equal spacing + no overlap). */
+export function equalSpacingStep(fontSize: number): number {
+  return Math.max(equalLetterStep(fontSize), minLetterStep(fontSize));
+}
+
 export function layoutGlyphsForRegion(
   name: string,
   ring: PolygonRing,
   fontSize: number,
   foreignRings: PolygonRing[] = [],
 ): { glyphs: GlyphPlacement[]; spine: LabelSpine; fontSize: number; letterSpacing: number } {
+  const chars = [...name.trim().toUpperCase()];
+  if (chars.length === 0) {
+    const spine = orientSpineForReading(buildSpine(ring));
+    return { glyphs: [], spine, fontSize: LABEL_MIN_FONT, letterSpacing: equalSpacingStep(LABEL_MIN_FONT) };
+  }
+
   let bestGlyphs: GlyphPlacement[] = [];
   let bestSpine = orientSpineForReading(buildSpine(ring));
   let bestScore = -Infinity;
   let bestFontSize = fontSize;
-  let bestLetterSpacing = fontSize * LETTER_SPACING_FACTOR;
+  let bestLetterSpacing = equalSpacingStep(fontSize);
 
   for (const lengthFactor of [SPINE_LENGTH_FACTOR, 0.4, 0.32]) {
-    for (let fs = fontSize; fs >= fontSize * 0.80; fs -= fontSize * 0.1) {
-      const letterSpacing = fs * LETTER_SPACING_FACTOR;
+    for (let fs = fontSize; fs >= LABEL_MIN_FONT; fs -= Math.max(1, fontSize * 0.08)) {
+      const letterSpacing = equalSpacingStep(fs);
       for (const spine of spineCandidates(ring, lengthFactor)) {
         const glyphs = layoutGlyphs(name, spine, fs, letterSpacing);
-        if (glyphs.length === 0) continue;
-        const score = scoreLabelLayout(glyphs, ring, foreignRings);
+        if (glyphs.length !== chars.length) continue;
+        const score = scoreLabelLayout(glyphs, ring, foreignRings, spine);
         if (score > bestScore) {
           bestScore = score;
           bestGlyphs = glyphs;
@@ -219,6 +238,19 @@ export function layoutGlyphsForRegion(
         }
       }
     }
+  }
+
+  if (bestGlyphs.length === 0) {
+    const spine = orientSpineForReading(buildSpine(ring, 0.32));
+    const fs = LABEL_MIN_FONT;
+    const letterSpacing = equalSpacingStep(fs);
+    const glyphs = layoutGlyphs(name, spine, fs, letterSpacing);
+    return {
+      glyphs,
+      spine,
+      fontSize: fs,
+      letterSpacing,
+    };
   }
 
   return {
@@ -282,6 +314,43 @@ export function pointAtArcLength(
   return { ...quadPoint(spine, t), t };
 }
 
+function unitTangent(spine: LabelSpine, t: number): { x: number; y: number } {
+  const tan = quadTangent(spine, clamp(t, 0, 1));
+  const len = Math.hypot(tan.x, tan.y) || 1;
+  return { x: tan.x / len, y: tan.y / len };
+}
+
+/** Arc-length position; extrapolates past spine ends so equal spacing never stacks. */
+export function pointAtArcLengthExtended(
+  spine: LabelSpine,
+  arcLen: number,
+  table = buildArcTable(spine),
+): { x: number; y: number; t: number } {
+  if (arcLen < 0) {
+    const u = unitTangent(spine, 0);
+    const p0 = quadPoint(spine, 0);
+    return { x: p0.x + u.x * arcLen, y: p0.y + u.y * arcLen, t: 0 };
+  }
+  if (arcLen > table.total) {
+    const excess = arcLen - table.total;
+    const u = unitTangent(spine, 1);
+    const p1 = quadPoint(spine, 1);
+    return { x: p1.x + u.x * excess, y: p1.y + u.y * excess, t: 1 };
+  }
+  return pointAtArcLength(spine, arcLen, table);
+}
+
+export function tangentDegreesAtArc(
+  spine: LabelSpine,
+  arcLen: number,
+  table = buildArcTable(spine),
+): number {
+  if (arcLen <= 0) return tangentDegreesAt(spine, 0);
+  if (arcLen >= table.total) return tangentDegreesAt(spine, 1);
+  const { t } = pointAtArcLength(spine, arcLen, table);
+  return tangentDegreesAt(spine, t);
+}
+
 export function tangentDegreesAt(spine: LabelSpine, t: number): number {
   const tan = quadTangent(spine, clamp(t, 0, 1));
   return (Math.atan2(tan.y, tan.x) * 180) / Math.PI;
@@ -296,9 +365,9 @@ export function layoutGlyphs(
   name: string,
   spine: LabelSpine,
   fontSize: number,
-  letterSpacing: number = equalLetterStep(fontSize),
+  letterSpacing: number = equalSpacingStep(fontSize),
 ): GlyphPlacement[] {
-  const chars = [...name.toUpperCase()];
+  const chars = [...name.trim().toUpperCase()];
   if (chars.length === 0) return [];
 
   const oriented = orientSpineForReading(spine);
@@ -317,25 +386,19 @@ export function layoutGlyphs(
     ];
   }
 
-  let step = letterSpacing;
-  let totalSpan = (chars.length - 1) * step;
-  const maxSpan = table.total * 0.92;
-  if (totalSpan > maxSpan) {
-    step = maxSpan / (chars.length - 1);
-    totalSpan = maxSpan;
-  }
+  const step = Math.max(letterSpacing, minLetterStep(fontSize));
+  const totalSpan = (chars.length - 1) * step;
   const start = (table.total - totalSpan) / 2;
 
   const glyphs: GlyphPlacement[] = [];
   for (let i = 0; i < chars.length; i++) {
     const centerArc = start + i * step;
-    const { t } = pointAtArcLength(oriented, centerArc, table);
-    const { x, y } = quadPoint(oriented, t);
+    const { x, y } = pointAtArcLengthExtended(oriented, centerArc, table);
     glyphs.push({
       char: chars[i]!,
       x,
       y,
-      rotation: tangentDegreesAt(oriented, t),
+      rotation: tangentDegreesAtArc(oriented, centerArc, table),
     });
   }
   return glyphs;

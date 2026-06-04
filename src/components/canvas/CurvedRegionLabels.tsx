@@ -4,9 +4,7 @@ import type { CountryTerritory, RegionLabelPlacement } from '../../types/project
 import {
   defaultCharWidth,
   exteriorRingsOnly,
-  layoutGlyphs,
   layoutGlyphsForRegion,
-  orientSpineForReading,
 } from '../../utils/curvedLabel';
 import { computeRegionLabels } from '../../utils/territoryGeometry';
 
@@ -51,33 +49,31 @@ export function CurvedRegionLabels({ country, allCountries }: CurvedRegionLabels
     [country, foreignRings],
   );
 
+  const displayName = country.name.trim();
+
   const glyphGroups = useMemo(() => {
+    if (!displayName) return [];
     return exteriors
       .map((ring, i) => {
         const placement = placements[i];
-        if (!placement?.spine) return null;
+        const baseFontSize = placement?.fontSize ?? 14;
 
-        const { fontSize, letterSpacing, spine } = layoutGlyphsForRegion(
-          country.name,
+        const { fontSize, glyphs } = layoutGlyphsForRegion(
+          displayName,
           ring,
-          placement.fontSize,
+          baseFontSize,
           foreignRings,
         );
-        const glyphs = layoutGlyphs(
-          country.name,
-          orientSpineForReading(spine),
-          fontSize,
-          letterSpacing,
-        );
+        if (glyphs.length === 0) return null;
+
         return {
           key: `${country.id}-label-${i}`,
           fontSize,
-          letterSpacing,
           glyphs,
         };
       })
-      .filter((g): g is NonNullable<typeof g> => g !== null && g.glyphs.length > 0);
-  }, [country.name, exteriors, placements, foreignRings]);
+      .filter((g): g is NonNullable<typeof g> => g !== null);
+  }, [country.id, displayName, exteriors, placements, foreignRings]);
 
   if (glyphGroups.length === 0) return null;
 

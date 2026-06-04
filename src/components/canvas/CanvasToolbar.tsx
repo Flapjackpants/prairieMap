@@ -1,6 +1,8 @@
 import { Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
+import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
+import { AddNationModal } from './AddNationModal';
 
 const TOOLS: { id: ToolMode; icon: typeof Hand; label: string; shortcut: string }[] = [
   { id: 'pan', icon: Hand, label: 'Pan (Space or middle-drag)', shortcut: 'PAN' },
@@ -26,6 +28,7 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
   } = useProject();
   const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
+  const [showAddNation, setShowAddNation] = useState(false);
 
   return (
     <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -58,12 +61,7 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
             type="button"
             title="Add faction"
             className="btn-icon h-7 w-7"
-            onClick={() => {
-              const name = prompt('Faction / country name:', 'New Nation');
-              if (!name) return;
-              const hex = prompt('Color hex:', '#448aff');
-              if (hex) addPaletteColor(name, hex);
-            }}
+            onClick={() => setShowAddNation(true)}
           >
             <Plus className="h-3 w-3" />
           </button>
@@ -142,6 +140,17 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
         <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
           Click map to place division · crop editor opens
         </p>
+      )}
+
+      {showAddNation && (
+        <AddNationModal
+          palette={palette}
+          onClose={() => setShowAddNation(false)}
+          onConfirm={(name, hex) => {
+            setShowAddNation(false);
+            void addPaletteColor(name, hex);
+          }}
+        />
       )}
     </div>
   );

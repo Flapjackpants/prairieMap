@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.models.project import (
+    AddPaletteColorRequest,
     AddRegionRequest,
     ClaimAnchorRequest,
     DeleteCountryRequest,
@@ -43,6 +44,12 @@ def update_faction_metadata(req: UpdateFactionMetadataRequest) -> ProjectMutatio
     project = project_service.update_faction_metadata(
         req.project, req.factionId, req.name, req.hex
     )
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/add-palette-color", response_model=ProjectMutationResponse)
+def add_palette_color(req: AddPaletteColorRequest) -> ProjectMutationResponse:
+    project = project_service.add_palette_color(req.project, req.name, req.hex)
     return ProjectMutationResponse(project=project)
 
 
