@@ -60,7 +60,7 @@ body {
 
 /* ─── Panel architecture (brushed metal plates) ─── */
 .panel {
-  @apply flex flex-col bg-surface-raised;
+  @apply flex min-h-0 flex-col bg-surface-raised;
   border-top: 1px solid var(--color-metal-highlight);
   border-left: 1px solid var(--color-metal-highlight);
   border-bottom: 1px solid var(--color-metal-shadow);
@@ -71,6 +71,10 @@ body {
     transparent 28%,
     rgba(0, 0, 0, 0.12) 100%
   );
+}
+
+.panel-scroll {
+  @apply min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain;
 }
 
 .panel-header {
@@ -160,7 +164,7 @@ body {
 }
 
 .btn-icon:disabled {
-  @apply opacity-35;
+  @apply opacity-50;
 }
 
 .btn-primary {

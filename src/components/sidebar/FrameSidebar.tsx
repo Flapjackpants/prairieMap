@@ -87,7 +87,7 @@ export function FrameSidebar() {
       : null;
 
   return (
-    <aside className="panel">
+    <aside className="panel flex h-full min-h-0 flex-col overflow-hidden">
       <div className="panel-header">
         <span className="led led-on" aria-hidden />
         <span className="panel-bracket">[[</span>
@@ -111,7 +111,7 @@ export function FrameSidebar() {
         )}
       </div>
 
-      <div className="panel-inset flex-1 overflow-y-auto p-2">
+      <div className="panel-inset panel-scroll p-2">
         {timeline.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center">
             <ImageIcon className="h-10 w-10 text-border-bright opacity-50" />

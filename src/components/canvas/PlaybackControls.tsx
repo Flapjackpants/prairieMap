@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import {
   ChevronFirst,
   ChevronLast,
+  Clapperboard,
   Pause,
   Play,
   SkipBack,
@@ -8,91 +10,141 @@ import {
 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import { usePlayback } from '../../hooks/usePlayback';
+import { useVideoExport } from '../../hooks/useVideoExport';
+import { ExportFrameStage } from './ExportFrameStage';
+import { ExportVideoModal } from './ExportVideoModal';
 
 export function PlaybackControls() {
-  const { state, setTimelineIndex, nextFrame, prevFrame } = useProject();
+  const { state, setTimelineIndex, nextFrame, prevFrame, apiReady } = useProject();
   const { timeline, currentTimelineIndex } = state;
   const { isPlaying, canPlay, togglePlay, goToStart, goToEnd } = usePlayback();
+  const video = useVideoExport();
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const hasFrames = timeline.length > 0;
 
+  const handleCompileClick = () => {
+    if (!apiReady) {
+      alert('Start the API server: npm run dev:api (or npm run dev:all)');
+      return;
+    }
+    setShowExportModal(true);
+  };
+
   return (
-    <div className="flex shrink-0 items-center justify-center gap-1.5 border-t border-metal-shadow bg-surface-overlay px-3 py-2">
-      <span className="led mr-1 hidden sm:inline" aria-hidden />
-      <span className="mr-2 hidden font-mono text-[9px] tracking-widest text-text-muted uppercase sm:inline">
-        Transport
-      </span>
-
-      <button
-        type="button"
-        className="btn-icon h-8 w-8"
-        disabled={!hasFrames}
-        onClick={goToStart}
-        title="First frame"
-      >
-        <ChevronFirst className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        className="btn-icon h-8 w-8"
-        disabled={!hasFrames || currentTimelineIndex === 0}
-        onClick={prevFrame}
-        title="Previous frame"
-      >
-        <SkipBack className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        className={`btn-icon relative h-9 w-9 ${isPlaying ? 'btn-icon-active' : ''}`}
-        disabled={!canPlay}
-        onClick={togglePlay}
-        title={isPlaying ? 'Pause' : 'Play'}
-      >
-        {isPlaying ? (
-          <>
-            <Pause className="h-4 w-4" />
-            <span className="led led-on absolute -top-0.5 -right-0.5" aria-hidden />
-          </>
-        ) : (
-          <Play className="h-4 w-4" />
-        )}
-      </button>
-      <button
-        type="button"
-        className="btn-icon h-8 w-8"
-        disabled={!hasFrames || currentTimelineIndex >= timeline.length - 1}
-        onClick={nextFrame}
-        title="Next frame"
-      >
-        <SkipForward className="h-3.5 w-3.5" />
-      </button>
-      <button
-        type="button"
-        className="btn-icon h-8 w-8"
-        disabled={!hasFrames}
-        onClick={goToEnd}
-        title="Last frame"
-      >
-        <ChevronLast className="h-3.5 w-3.5" />
-      </button>
-
-      <div className="ml-3 flex min-w-[140px] flex-1 items-center gap-2 border-l border-metal-shadow pl-3">
-        <input
-          type="range"
-          min={0}
-          max={Math.max(0, timeline.length - 1)}
-          value={currentTimelineIndex}
-          disabled={!hasFrames}
-          onChange={(e) => setTimelineIndex(Number(e.target.value))}
-          className="flex-1 accent-accent-orange disabled:opacity-40"
+    <>
+      <ExportFrameStage snapshot={video.snapshot} stageRef={video.stageRef} />
+      {showExportModal && (
+        <ExportVideoModal
+          frameCount={timeline.length}
+          isExporting={video.isExporting}
+          progress={video.progress}
+          error={video.error}
+          onConfirm={(seconds) => {
+            void video.runExport(seconds).finally(() => setShowExportModal(false));
+          }}
+          onCancel={() => {
+            video.cancel();
+            setShowExportModal(false);
+          }}
+          onClose={() => setShowExportModal(false)}
         />
-        <span className="font-mono text-[10px] tracking-widest text-accent-cyan tabular-nums whitespace-nowrap uppercase">
-          {hasFrames
-            ? `${String(currentTimelineIndex + 1).padStart(2, '0')}/${String(timeline.length).padStart(2, '0')}`
-            : 'NO_DATA'}
-        </span>
-        {isPlaying && <span className="led led-on" title="Playing" aria-hidden />}
+      )}
+
+      <div className="shrink-0 border-t border-metal-shadow bg-surface-overlay px-2 py-2">
+        <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-0.5">
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="led mr-0.5 hidden sm:inline" aria-hidden />
+            <span className="mr-1 hidden font-mono text-[9px] tracking-widest text-text-muted uppercase lg:inline">
+              Transport
+            </span>
+
+            <button
+              type="button"
+              className="btn-icon h-8 w-8 shrink-0"
+              disabled={!hasFrames}
+              onClick={goToStart}
+              title="First frame"
+            >
+              <ChevronFirst className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="btn-icon h-8 w-8 shrink-0"
+              disabled={!hasFrames || currentTimelineIndex === 0}
+              onClick={() => void prevFrame()}
+              title="Previous frame"
+            >
+              <SkipBack className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className={`btn-icon relative h-9 w-9 shrink-0 ${isPlaying ? 'btn-icon-active' : ''}`}
+              disabled={!canPlay}
+              onClick={togglePlay}
+              title={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? (
+                <>
+                  <Pause className="h-4 w-4" />
+                  <span className="led led-on absolute -top-0.5 -right-0.5" aria-hidden />
+                </>
+              ) : (
+                <Play className="h-4 w-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              className="btn-icon h-8 w-8 shrink-0"
+              disabled={!hasFrames || currentTimelineIndex >= timeline.length - 1}
+              onClick={() => void nextFrame()}
+              title="Next frame"
+            >
+              <SkipForward className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              className="btn-icon h-8 w-8 shrink-0"
+              disabled={!hasFrames}
+              onClick={goToEnd}
+              title="Last frame"
+            >
+              <ChevronLast className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              className={`btn-icon flex h-8 shrink-0 items-center gap-1 px-2 ${
+                hasFrames && !video.isExporting ? 'text-accent-orange' : ''
+              }`}
+              disabled={!hasFrames || video.isExporting}
+              onClick={handleCompileClick}
+              title="Compile timeline to MP4 (requires API + ffmpeg)"
+            >
+              <Clapperboard className="h-4 w-4 shrink-0" />
+              <span className="font-mono text-[8px] font-bold tracking-wider">VID</span>
+            </button>
+          </div>
+
+          <div className="flex min-w-[140px] flex-1 items-center gap-2 border-l border-metal-shadow pl-2">
+            <input
+              type="range"
+              min={0}
+              max={Math.max(0, timeline.length - 1)}
+              value={currentTimelineIndex}
+              disabled={!hasFrames}
+              onChange={(e) => void setTimelineIndex(Number(e.target.value))}
+              className="min-w-[80px] flex-1 accent-accent-orange disabled:opacity-40"
+            />
+            <span className="shrink-0 font-mono text-[10px] tracking-widest text-accent-cyan tabular-nums whitespace-nowrap uppercase">
+              {hasFrames
+                ? `${String(currentTimelineIndex + 1).padStart(2, '0')}/${String(timeline.length).padStart(2, '0')}`
+                : 'NO_DATA'}
+            </span>
+            {isPlaying && <span className="led led-on shrink-0" title="Playing" aria-hidden />}
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

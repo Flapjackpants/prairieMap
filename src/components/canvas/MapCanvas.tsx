@@ -284,7 +284,7 @@ export function MapCanvas() {
         : 'default';
 
   return (
-    <main className="panel flex min-w-0 flex-col">
+    <main className="panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       <div className="panel-header">
         <span className="led led-cyan" aria-hidden />
         <span className="panel-bracket">[</span>

@@ -1,77 +1,90 @@
 # PrairieMap
 
-A modern war/map visualization tool for building chronological map timelapses. Import a folder of map images, color regions, add labels, and document events per frame.
+A war/map visualization tool for building chronological map timelapses. Import a folder of map images, draw territories, add labels, and document events per frame.
 
 ## Stack
 
-- **React 19** + **Vite** + **TypeScript**
-- **Tailwind CSS v4** (dark cyberpunk/military theme)
-- **Konva / react-konva** for canvas layers
-- **Lucide React** icons
+- **Frontend:** React 19, Vite, TypeScript, Tailwind CSS v4, Konva
+- **Backend:** FastAPI, Pydantic, Shapely (polygon logic), ffmpeg (video compile)
+
+Map images stay in the browser (folder picker). Project data and geometry mutations are handled by the Python API.
 
 ## Getting started
+
+### 1. Backend (Python 3.11+)
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+### 2. Frontend
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the dev server URL, click **Load Folder**, and select a directory of map images (PNG, JPG, etc.). Frames are sorted alphanumerically by filename.
+Or run both together:
 
-## Features (current)
+```bash
+npm install
+npm run dev:all
+```
+
+Open http://localhost:5173. The Vite dev server proxies `/api` to the backend.
+
+**Video compile** requires `ffmpeg` on your PATH.
+
+## Features
 
 - 3-panel layout: timeline, map canvas, intel board
-- **Assets + timeline** data model: multiple copies per filename, independent timeline order
-- Folder import with smart reconciliation (new files auto-append; missing assets show placeholders)
-- Drag-and-drop timeline reordering
-- Duplicate frame (map / drawings / info board toggles)
-- Delete frame with orphan asset cleanup
-- Pan & zoom (mouse wheel, drag, or hold **Space** + drag)
-- Brush tool with size and opacity
-- Text labels (click to place, double-click to edit, drag to move)
-- Carry-over labels toggle between frames
-- Faction color palette
-- Per-frame date, markdown notes, and faction stats
-- Playback controls (play/pause, scrubber)
-- Export / import project JSON (v2 schema; v1 auto-migrated)
+- Assets + timeline model with folder reconciliation
+- Territory area-select with overlap transfer (server-side Shapely)
+- Duplicate frame, drag reorder, playback
+- Per-frame date, markdown notes, faction stats
+- JSON export/import (v2; v1 migrated on import)
+- Save/load project via API (`backend/projects/`)
+- Compile timeline to MP4 (client renders frames → server ffmpeg)
 
 ## Project structure
 
 ```
+backend/
+  app/
+    main.py           FastAPI app
+    api/              REST routes
+    models/           Pydantic schemas
+    services/         geometry, project, video, export
+  projects/           Saved JSON projects (gitignored)
 src/
-├── components/
-│   ├── canvas/       MapCanvas, CanvasToolbar, PlaybackControls
-│   ├── infoboard/    InfoBoard
-│   ├── layout/       AppLayout, Header
-│   └── sidebar/      FrameSidebar, DuplicateFrameModal
-├── context/          ProjectContext (assets + timeline state)
-├── hooks/            usePlayback
-├── types/            project.ts
-└── utils/            sortFiles, cloneFrameData, exportSchema, reconcileFolder, projectHelpers
-```
-
-### JSON export schema (v2)
-
-```json
-{
-  "version": 2,
-  "projectName": "Strategic_Campaign",
-  "assets": {
-    "europe_1939.png": [
-      { "drawings": [], "labels": [], "infoBoard": { "date": "", "text": "", "factionStats": [] } }
-    ]
-  },
-  "timeline": [
-    { "id": "uuid", "filename": "europe_1939.png", "copyIndex": 0 }
-  ]
-}
+  api/                HTTP client
+  components/         React UI + Konva canvas
+  context/            ProjectContext (UI + API sync)
+  hooks/              playback, video export
+  utils/              client-only helpers (snap, reconcile files)
 ```
 
 ## Scripts
 
-| Command        | Description          |
-|----------------|----------------------|
-| `npm run dev`  | Start dev server     |
-| `npm run build`| Production build     |
-| `npm run preview` | Preview build     |
-# prairieMap
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Vite dev server only |
+| `npm run dev:api` | FastAPI only |
+| `npm run dev:all` | API + frontend |
+| `npm run build` | Production frontend build |
+| `cd backend && pytest` | Backend unit tests |
+
+## API overview
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/health` | Health check |
+| POST | `/api/projects` | Create project |
+| GET/PUT | `/api/projects/{id}` | Load/save |
+| POST | `/api/geometry/add-region` | Add territory polygon |
+| POST | `/api/timeline/duplicate` | Duplicate frame |
+| POST | `/api/video/compile` | Build MP4 from PNG frames |

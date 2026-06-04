@@ -2,19 +2,18 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import * as api from '../api/backend';
+import { ApiError, apiHealth } from '../api/client';
 import {
-  createEmptyAnnotations,
-  createEmptyAssetState,
-  createEmptyFrameInfo,
   DEFAULT_PALETTE,
-  isBlankAssetKey,
-  type AssetFrameState,
-  type FrameAnnotations,
   type FrameDuplicateOptions,
   type FrameInfo,
   type PaletteColor,
@@ -22,58 +21,33 @@ import {
   type ProjectExport,
   type ProjectState,
   type ResolvedFrame,
-  type TimelineEntry,
   type ToolMode,
   type ViewportState,
 } from '../types/project';
-import { cloneAnnotations, cloneCountry, cloneFrameInfo } from '../utils/cloneFrameData';
-import { applyTerritoryTransfer } from '../utils/polygonOps';
-import { recomputeCountryLabels } from '../utils/territoryGeometry';
-import { importToAssets, stateToExport } from '../utils/exportSchema';
+import { mergeServerProject, toProjectBody } from '../types/projectBody';
+import { getNextMapFilename } from '../utils/projectHelpers';
 import {
-  cleanupAssetCopies,
-  clampTimelineIndex,
-  displayFilename,
-  getAssetState,
-  getNextMapFilename,
-  resolveCurrentFrame,
-} from '../utils/projectHelpers';
-import {
+  buildFileRegistry,
   initProjectFromFolder,
   reconcileFolderWithProject,
   revokeFileRegistry,
 } from '../utils/reconcileFolder';
+import { resolveCurrentFrame } from '../utils/projectHelpers';
+import { stateToExport } from '../utils/exportSchema';
 
-type AssetTarget = { filename: string; copyIndex: number };
+const PROJECT_ID_KEY = 'prairiemap-project-id';
 
-type ProjectAction =
-  | { type: 'LOAD_FOLDER'; files: File[] }
-  | { type: 'IMPORT_PROJECT'; exportData: ProjectExport; files: File[] }
-  | { type: 'SET_TIMELINE_INDEX'; index: number }
-  | { type: 'REORDER_TIMELINE'; fromIndex: number; toIndex: number }
-  | { type: 'DELETE_TIMELINE_ENTRY'; index: number }
-  | { type: 'DUPLICATE_FRAME'; sourceIndex: number; options: FrameDuplicateOptions }
+type UiAction =
+  | { type: 'APPLY_SERVER'; body: ReturnType<typeof toProjectBody> }
+  | { type: 'SET_FILE_REGISTRY'; registry: ProjectState['fileRegistry'] }
+  | { type: 'MERGE_FOLDER'; patch: Pick<ProjectState, 'assets' | 'timeline' | 'fileRegistry' | 'projectName'> }
   | { type: 'SET_TOOL'; tool: ToolMode }
   | { type: 'SET_ACTIVE_COLOR'; colorId: string }
   | { type: 'TOGGLE_CARRY_LABELS' }
   | { type: 'SET_VIEWPORT'; viewport: ViewportState }
-  | {
-      type: 'ADD_TERRITORY_REGION';
-      target: AssetTarget;
-      factionId: string;
-      factionName: string;
-      color: string;
-      region: PolygonRing;
-    }
-  | { type: 'DELETE_COUNTRY'; target: AssetTarget; countryId: string }
   | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
-  | { type: 'UPDATE_FRAME_INFO'; target: AssetTarget; info: Partial<FrameInfo> }
-  | { type: 'SET_ASSET_STATE'; target: AssetTarget; state: AssetFrameState }
-  | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
-  | { type: 'UPDATE_PALETTE_COLOR'; color: PaletteColor }
-  | { type: 'UPDATE_FACTION_METADATA'; factionId: string; name?: string; hex?: string }
-  | { type: 'REMOVE_PALETTE_COLOR'; colorId: string }
   | { type: 'SET_FILE_CANVAS_SIZE'; filename: string; width: number; height: number }
+  | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
   | { type: 'CLEAR_PROJECT' };
 
 const initialState: ProjectState = {
@@ -90,358 +64,34 @@ const initialState: ProjectState = {
   selectedCountryId: null,
 };
 
-function mergeCarriedTerritories(
-  prev: FrameAnnotations,
-  next: FrameAnnotations,
-): FrameAnnotations {
-  const existingFactions = new Set(next.countries.map((c) => c.factionId));
-  const carried = prev.countries
-    .filter((c) => !existingFactions.has(c.factionId))
-    .map((c) => cloneCountry(c));
-  return { countries: [...carried, ...next.countries] };
-}
-
-function updateAssetAt(
-  assets: Record<string, AssetFrameState[]>,
-  target: AssetTarget,
-  updater: (state: AssetFrameState) => AssetFrameState,
-): Record<string, AssetFrameState[]> {
-  const next = { ...assets };
-  const current = getAssetState(next, target.filename, target.copyIndex);
-  const updated = updater(current);
-  const copies = [...(next[target.filename] ?? [])];
-  while (copies.length <= target.copyIndex) {
-    copies.push(createEmptyAssetState());
-  }
-  copies[target.copyIndex] = updated;
-  next[target.filename] = copies;
-  return next;
-}
-
-function projectReducer(state: ProjectState, action: ProjectAction): ProjectState {
+function uiReducer(state: ProjectState, action: UiAction): ProjectState {
   switch (action.type) {
-    case 'LOAD_FOLDER': {
-      revokeFileRegistry(state.fileRegistry);
-      if (state.timeline.length === 0) {
-        const init = initProjectFromFolder(action.files);
-        return {
-          ...state,
-          ...init,
-          currentTimelineIndex: 0,
-          viewport: { scale: 1, x: 0, y: 0 },
-        };
-      }
-      const reconciled = reconcileFolderWithProject(action.files, {
-        assets: state.assets,
-        timeline: state.timeline,
-        projectName: state.projectName,
-        palette: state.palette,
-        carryOverLabels: state.carryOverLabels,
-      });
+    case 'APPLY_SERVER':
+      return mergeServerProject(state, action.body);
+    case 'SET_FILE_REGISTRY':
+      return { ...state, fileRegistry: action.registry };
+    case 'MERGE_FOLDER':
       return {
         ...state,
-        assets: reconciled.assets,
-        timeline: reconciled.timeline,
-        fileRegistry: reconciled.fileRegistry,
-        currentTimelineIndex: clampTimelineIndex(
+        projectName: action.patch.projectName,
+        assets: action.patch.assets,
+        timeline: action.patch.timeline,
+        fileRegistry: action.patch.fileRegistry,
+        currentTimelineIndex: Math.min(
           state.currentTimelineIndex,
-          reconciled.timeline.length,
+          Math.max(0, action.patch.timeline.length - 1),
         ),
       };
-    }
-
-    case 'IMPORT_PROJECT': {
-      revokeFileRegistry(state.fileRegistry);
-      const imported = importToAssets(action.exportData);
-      const reconciled = reconcileFolderWithProject(action.files, {
-        assets: imported.assets,
-        timeline: imported.timeline,
-        projectName: imported.projectName,
-        palette: imported.palette,
-        carryOverLabels: imported.carryOverLabels,
-      });
-      return {
-        ...state,
-        projectName: imported.projectName,
-        assets: reconciled.assets,
-        timeline: reconciled.timeline,
-        fileRegistry: reconciled.fileRegistry,
-        palette: imported.palette,
-        carryOverLabels: imported.carryOverLabels,
-        activeColorId: imported.palette[0]?.id ?? state.activeColorId,
-        currentTimelineIndex: 0,
-        viewport: { scale: 1, x: 0, y: 0 },
-      };
-    }
-
-    case 'SET_TIMELINE_INDEX': {
-      const index = clampTimelineIndex(action.index, state.timeline.length);
-      if (index === state.currentTimelineIndex || state.timeline.length === 0) {
-        return { ...state, currentTimelineIndex: index };
-      }
-
-      const prevEntry = state.timeline[state.currentTimelineIndex];
-      const nextEntry = state.timeline[index];
-      if (!prevEntry || !nextEntry) {
-        return { ...state, currentTimelineIndex: index, viewport: { scale: 1, x: 0, y: 0 } };
-      }
-
-      if (state.carryOverLabels) {
-        const prevData = getAssetState(state.assets, prevEntry.filename, prevEntry.copyIndex);
-        const nextData = getAssetState(state.assets, nextEntry.filename, nextEntry.copyIndex);
-        const merged = mergeCarriedTerritories(prevData.annotations, nextData.annotations);
-        const assets = updateAssetAt(
-          state.assets,
-          { filename: nextEntry.filename, copyIndex: nextEntry.copyIndex },
-          (s) => ({ ...s, annotations: merged }),
-        );
-        return {
-          ...state,
-          assets,
-          currentTimelineIndex: index,
-          viewport: { scale: 1, x: 0, y: 0 },
-        };
-      }
-
-      return {
-        ...state,
-        currentTimelineIndex: index,
-        viewport: { scale: 1, x: 0, y: 0 },
-      };
-    }
-
-    case 'REORDER_TIMELINE': {
-      const { fromIndex, toIndex } = action;
-      if (
-        fromIndex === toIndex ||
-        fromIndex < 0 ||
-        toIndex < 0 ||
-        fromIndex >= state.timeline.length ||
-        toIndex >= state.timeline.length
-      ) {
-        return state;
-      }
-      const timeline = [...state.timeline];
-      const [moved] = timeline.splice(fromIndex, 1);
-      timeline.splice(toIndex, 0, moved);
-
-      let currentTimelineIndex = state.currentTimelineIndex;
-      if (currentTimelineIndex === fromIndex) {
-        currentTimelineIndex = toIndex;
-      } else if (fromIndex < currentTimelineIndex && toIndex >= currentTimelineIndex) {
-        currentTimelineIndex -= 1;
-      } else if (fromIndex > currentTimelineIndex && toIndex <= currentTimelineIndex) {
-        currentTimelineIndex += 1;
-      }
-
-      return { ...state, timeline, currentTimelineIndex };
-    }
-
-    case 'DELETE_TIMELINE_ENTRY': {
-      if (state.timeline.length === 0) return state;
-      const deleteIndex = clampTimelineIndex(action.index, state.timeline.length);
-      const timeline = state.timeline.filter((_, i) => i !== deleteIndex);
-
-      let currentTimelineIndex = state.currentTimelineIndex;
-      if (timeline.length === 0) {
-        currentTimelineIndex = 0;
-      } else if (deleteIndex < currentTimelineIndex) {
-        currentTimelineIndex -= 1;
-      } else if (deleteIndex === currentTimelineIndex) {
-        currentTimelineIndex = Math.min(deleteIndex, timeline.length - 1);
-      }
-
-      const cleaned = cleanupAssetCopies(state.assets, timeline);
-      return {
-        ...state,
-        assets: cleaned.assets,
-        timeline: cleaned.timeline,
-        currentTimelineIndex: clampTimelineIndex(currentTimelineIndex, timeline.length),
-        viewport: { scale: 1, x: 0, y: 0 },
-      };
-    }
-
-    case 'DUPLICATE_FRAME': {
-      const sourceEntry = state.timeline[action.sourceIndex];
-      if (!sourceEntry) return state;
-
-      const sourceData = getAssetState(
-        state.assets,
-        sourceEntry.filename,
-        sourceEntry.copyIndex,
-      );
-      const { options } = action;
-      const insertIndex = action.sourceIndex + 1;
-
-      let assetFilename: string;
-      if (options.duplicateMapImage) {
-        assetFilename = isBlankAssetKey(sourceEntry.filename)
-          ? displayFilename(sourceEntry.filename)
-          : sourceEntry.filename;
-      } else {
-        const nextMap = getNextMapFilename(
-          state.timeline,
-          state.fileRegistry,
-          action.sourceIndex,
-        );
-        if (!nextMap) return state;
-        assetFilename = nextMap;
-      }
-
-      const newState: AssetFrameState = {
-        annotations: options.duplicateAnnotations
-          ? cloneAnnotations(sourceData.annotations)
-          : createEmptyAnnotations(),
-        info: options.duplicateInfoBoard
-          ? cloneFrameInfo(sourceData.info)
-          : createEmptyFrameInfo(),
-      };
-
-      const assets = { ...state.assets };
-      if (!assets[assetFilename]) assets[assetFilename] = [];
-      const copyIndex = assets[assetFilename].length;
-      assets[assetFilename] = [...assets[assetFilename], newState];
-
-      const newEntry: TimelineEntry = {
-        id: uuidv4(),
-        filename: assetFilename,
-        copyIndex,
-      };
-
-      const timeline = [
-        ...state.timeline.slice(0, insertIndex),
-        newEntry,
-        ...state.timeline.slice(insertIndex),
-      ];
-
-      return {
-        ...state,
-        assets,
-        timeline,
-        currentTimelineIndex: insertIndex,
-        viewport: { scale: 1, x: 0, y: 0 },
-      };
-    }
-
     case 'SET_TOOL':
       return { ...state, tool: action.tool };
-
     case 'SET_ACTIVE_COLOR':
       return { ...state, activeColorId: action.colorId };
-
     case 'TOGGLE_CARRY_LABELS':
       return { ...state, carryOverLabels: !state.carryOverLabels };
-
     case 'SET_VIEWPORT':
       return { ...state, viewport: action.viewport };
-
-    case 'ADD_TERRITORY_REGION':
-      return {
-        ...state,
-        assets: updateAssetAt(state.assets, action.target, (s) => ({
-          ...s,
-          annotations: {
-            countries: applyTerritoryTransfer(
-              s.annotations.countries,
-              action.region,
-              action.factionId,
-              action.factionName,
-              action.color,
-            ),
-          },
-        })),
-      };
-
-    case 'DELETE_COUNTRY':
-      return {
-        ...state,
-        assets: updateAssetAt(state.assets, action.target, (s) => ({
-          ...s,
-          annotations: {
-            countries: s.annotations.countries.filter((c) => c.id !== action.countryId),
-          },
-        })),
-        selectedCountryId:
-          state.selectedCountryId === action.countryId ? null : state.selectedCountryId,
-      };
-
     case 'SET_SELECTED_COUNTRY':
       return { ...state, selectedCountryId: action.countryId };
-
-    case 'UPDATE_FRAME_INFO':
-      return {
-        ...state,
-        assets: updateAssetAt(state.assets, action.target, (s) => ({
-          ...s,
-          info: { ...s.info, ...action.info },
-        })),
-      };
-
-    case 'SET_ASSET_STATE':
-      return {
-        ...state,
-        assets: updateAssetAt(state.assets, action.target, () => action.state),
-      };
-
-    case 'ADD_PALETTE_COLOR':
-      return {
-        ...state,
-        palette: [...state.palette, action.color],
-        activeColorId: action.color.id,
-      };
-
-    case 'UPDATE_PALETTE_COLOR':
-      return {
-        ...state,
-        palette: state.palette.map((c) =>
-          c.id === action.color.id ? action.color : c,
-        ),
-      };
-
-    case 'UPDATE_FACTION_METADATA': {
-      const { factionId, name, hex } = action;
-      const paletteEntry = state.palette.find((p) => p.id === factionId);
-      if (!paletteEntry) return state;
-
-      const nextName = name !== undefined ? name : paletteEntry.name;
-      const nextHex = hex !== undefined ? hex : paletteEntry.hex;
-
-      const palette = state.palette.map((p) =>
-        p.id === factionId ? { ...p, name: nextName, hex: nextHex } : p,
-      );
-
-      const assets: Record<string, AssetFrameState[]> = {};
-      for (const [filename, copies] of Object.entries(state.assets)) {
-        assets[filename] = copies.map((copy) => ({
-          ...copy,
-          annotations: {
-            countries: copy.annotations.countries
-              .map((c) =>
-                c.factionId === factionId
-                  ? recomputeCountryLabels({
-                      ...c,
-                      name: nextName.toUpperCase(),
-                      color: nextHex,
-                    })
-                  : c,
-              )
-              .filter((c) => c.regions.length > 0),
-          },
-        }));
-      }
-
-      return { ...state, palette, assets };
-    }
-
-    case 'REMOVE_PALETTE_COLOR': {
-      const palette = state.palette.filter((c) => c.id !== action.colorId);
-      const activeColorId =
-        state.activeColorId === action.colorId
-          ? palette[0]?.id ?? ''
-          : state.activeColorId;
-      return { ...state, palette, activeColorId };
-    }
-
     case 'SET_FILE_CANVAS_SIZE': {
       const entry = state.fileRegistry[action.filename];
       if (
@@ -462,12 +112,18 @@ function projectReducer(state: ProjectState, action: ProjectAction): ProjectStat
         },
       };
     }
-
-    case 'CLEAR_PROJECT': {
-      revokeFileRegistry(state.fileRegistry);
-      return { ...initialState, palette: state.palette, activeColorId: state.activeColorId };
-    }
-
+    case 'ADD_PALETTE_COLOR':
+      return {
+        ...state,
+        palette: [...state.palette, action.color],
+        activeColorId: action.color.id,
+      };
+    case 'CLEAR_PROJECT':
+      return {
+        ...initialState,
+        palette: state.palette,
+        activeColorId: state.activeColorId,
+      };
     default:
       return state;
   }
@@ -475,66 +131,206 @@ function projectReducer(state: ProjectState, action: ProjectAction): ProjectStat
 
 interface ProjectContextValue {
   state: ProjectState;
+  projectId: string | null;
+  apiReady: boolean;
+  apiError: string | null;
+  isSyncing: boolean;
   currentFrame: ResolvedFrame | null;
   activeColor: PaletteColor | undefined;
-  loadFolder: (files: FileList) => void;
-  setTimelineIndex: (index: number) => void;
-  reorderTimeline: (fromIndex: number, toIndex: number) => void;
-  deleteFrame: (index: number) => void;
-  nextFrame: () => void;
-  prevFrame: () => void;
+  loadFolder: (files: FileList) => Promise<void>;
+  setTimelineIndex: (index: number) => Promise<void>;
+  reorderTimeline: (fromIndex: number, toIndex: number) => Promise<void>;
+  deleteFrame: (index: number) => Promise<void>;
+  nextFrame: () => Promise<void>;
+  prevFrame: () => Promise<void>;
   setTool: (tool: ToolMode) => void;
   setActiveColor: (colorId: string) => void;
   toggleCarryLabels: () => void;
   setViewport: (viewport: ViewportState) => void;
-  addTerritoryRegion: (region: PolygonRing) => void;
-  deleteCountry: (countryId: string) => void;
+  addTerritoryRegion: (region: PolygonRing) => Promise<void>;
+  deleteCountry: (countryId: string) => Promise<void>;
   setSelectedCountry: (countryId: string | null) => void;
-  updateFrameInfo: (info: Partial<FrameInfo>) => void;
+  updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => void;
-  updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => void;
+  updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
   exportProject: () => ProjectExport;
-  importProject: (data: ProjectExport, files: File[]) => void;
-  duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => boolean;
+  importProject: (data: ProjectExport, files: File[]) => Promise<void>;
+  duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
   setFileCanvasSize: (filename: string, width: number, height: number) => void;
+  saveToServer: () => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
-function currentTarget(frame: ResolvedFrame | null): AssetTarget | null {
+function currentTarget(frame: ResolvedFrame | null) {
   if (!frame) return null;
   return { filename: frame.filename, copyIndex: frame.copyIndex };
 }
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(projectReducer, initialState);
+  const [state, dispatch] = useReducer(uiReducer, initialState);
+  const [projectId, setProjectId] = useState<string | null>(() =>
+    sessionStorage.getItem(PROJECT_ID_KEY),
+  );
+  const [apiReady, setApiReady] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const applyMutation = useCallback((res: api.ProjectMutationResponse) => {
+    dispatch({ type: 'APPLY_SERVER', body: res.project });
+    if (res.projectId) {
+      setProjectId(res.projectId);
+      sessionStorage.setItem(PROJECT_ID_KEY, res.projectId);
+    }
+  }, []);
+
+  const runMutation = useCallback(
+    async (fn: () => Promise<api.ProjectMutationResponse>) => {
+      setIsSyncing(true);
+      setApiError(null);
+      try {
+        const res = await fn();
+        applyMutation(res);
+      } catch (e) {
+        const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'API error';
+        setApiError(msg);
+        throw e;
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    [applyMutation],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await apiHealth();
+        if (cancelled) return;
+        setApiReady(true);
+        const storedId = sessionStorage.getItem(PROJECT_ID_KEY);
+        if (storedId) {
+          try {
+            const body = await api.getProject(storedId);
+            if (!cancelled) dispatch({ type: 'APPLY_SERVER', body });
+            setProjectId(storedId);
+            return;
+          } catch {
+            sessionStorage.removeItem(PROJECT_ID_KEY);
+          }
+        }
+        const created = await api.createProject();
+        if (!cancelled) {
+          applyMutation(created);
+        }
+      } catch {
+        if (!cancelled) {
+          setApiError('Backend unavailable. Start API: cd backend && uvicorn app.main:app --reload');
+          setApiReady(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyMutation]);
 
   const currentFrame = useMemo(() => resolveCurrentFrame(state), [state]);
   const activeColor = state.palette.find((c) => c.id === state.activeColorId);
 
-  const loadFolder = useCallback((files: FileList) => {
-    dispatch({ type: 'LOAD_FOLDER', files: Array.from(files) });
-  }, []);
+  const knownFilenames = useCallback(
+    () => Object.keys(stateRef.current.fileRegistry),
+    [],
+  );
 
-  const setTimelineIndex = useCallback((index: number) => {
-    dispatch({ type: 'SET_TIMELINE_INDEX', index });
-  }, []);
+  const loadFolder = useCallback(
+    async (files: FileList) => {
+      const fileArr = Array.from(files);
+      revokeFileRegistry(stateRef.current.fileRegistry);
+      const sorted = fileArr.filter((f) => f.type.startsWith('image/'));
+      sorted.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
+      );
+      const filenames = sorted.map((f) => f.name);
+      const registry = buildFileRegistry(sorted);
 
-  const reorderTimeline = useCallback((fromIndex: number, toIndex: number) => {
-    dispatch({ type: 'REORDER_TIMELINE', fromIndex, toIndex });
-  }, []);
+      if (stateRef.current.timeline.length === 0) {
+        const init = initProjectFromFolder(fileArr);
+        const res = await api.initFromFilenames(filenames);
+        dispatch({
+          type: 'MERGE_FOLDER',
+          patch: {
+            ...init,
+            assets: res.project.assets,
+            timeline: res.project.timeline,
+            fileRegistry: registry,
+          },
+        });
+        dispatch({ type: 'APPLY_SERVER', body: res.project });
+      } else {
+        const reconciled = reconcileFolderWithProject(fileArr, {
+          assets: stateRef.current.assets,
+          timeline: stateRef.current.timeline,
+          projectName: stateRef.current.projectName,
+          palette: stateRef.current.palette,
+          carryOverLabels: stateRef.current.carryOverLabels,
+        });
+        const res = await api.reconcileFilenames(toProjectBody(stateRef.current), filenames);
+        dispatch({
+          type: 'MERGE_FOLDER',
+          patch: {
+            projectName: stateRef.current.projectName,
+            assets: res.project.assets,
+            timeline: res.project.timeline,
+            fileRegistry: registry,
+          },
+        });
+        dispatch({ type: 'APPLY_SERVER', body: res.project });
+        void reconciled;
+      }
+    },
+    [],
+  );
 
-  const deleteFrame = useCallback((index: number) => {
-    dispatch({ type: 'DELETE_TIMELINE_ENTRY', index });
-  }, []);
+  const setTimelineIndex = useCallback(
+    async (index: number) => {
+      await runMutation(() =>
+        api.setTimelineIndex(toProjectBody(stateRef.current), index),
+      );
+      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
+    },
+    [runMutation],
+  );
 
-  const nextFrame = useCallback(() => {
-    dispatch({ type: 'SET_TIMELINE_INDEX', index: state.currentTimelineIndex + 1 });
-  }, [state.currentTimelineIndex]);
+  const reorderTimeline = useCallback(
+    async (fromIndex: number, toIndex: number) => {
+      await runMutation(() =>
+        api.reorderTimeline(toProjectBody(stateRef.current), fromIndex, toIndex),
+      );
+    },
+    [runMutation],
+  );
 
-  const prevFrame = useCallback(() => {
-    dispatch({ type: 'SET_TIMELINE_INDEX', index: state.currentTimelineIndex - 1 });
-  }, [state.currentTimelineIndex]);
+  const deleteFrame = useCallback(
+    async (index: number) => {
+      await runMutation(() =>
+        api.deleteTimelineEntry(toProjectBody(stateRef.current), index),
+      );
+      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
+    },
+    [runMutation],
+  );
+
+  const nextFrame = useCallback(async () => {
+    await setTimelineIndex(stateRef.current.currentTimelineIndex + 1);
+  }, [setTimelineIndex]);
+
+  const prevFrame = useCallback(async () => {
+    await setTimelineIndex(stateRef.current.currentTimelineIndex - 1);
+  }, [setTimelineIndex]);
 
   const setTool = useCallback((tool: ToolMode) => {
     dispatch({ type: 'SET_TOOL', tool });
@@ -553,29 +349,40 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addTerritoryRegion = useCallback(
-    (region: PolygonRing) => {
+    async (region: PolygonRing) => {
       const target = currentTarget(currentFrame);
       const faction = activeColor;
       if (!target || !faction) return;
-      dispatch({
-        type: 'ADD_TERRITORY_REGION',
-        target,
-        factionId: faction.id,
-        factionName: faction.name,
-        color: faction.hex,
-        region,
-      });
+      await runMutation(() =>
+        api.addTerritoryRegion({
+          project: toProjectBody(stateRef.current),
+          target,
+          factionId: faction.id,
+          factionName: faction.name,
+          color: faction.hex,
+          region,
+        }),
+      );
     },
-    [currentFrame, activeColor],
+    [currentFrame, activeColor, runMutation],
   );
 
   const deleteCountry = useCallback(
-    (countryId: string) => {
+    async (countryId: string) => {
       const target = currentTarget(currentFrame);
       if (!target) return;
-      dispatch({ type: 'DELETE_COUNTRY', target, countryId });
+      await runMutation(() =>
+        api.deleteCountry({
+          project: toProjectBody(stateRef.current),
+          target,
+          countryId,
+        }),
+      );
+      if (stateRef.current.selectedCountryId === countryId) {
+        dispatch({ type: 'SET_SELECTED_COUNTRY', countryId: null });
+      }
     },
-    [currentFrame],
+    [currentFrame, runMutation],
   );
 
   const setSelectedCountry = useCallback((countryId: string | null) => {
@@ -583,12 +390,20 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateFrameInfo = useCallback(
-    (info: Partial<FrameInfo>) => {
+    async (info: Partial<FrameInfo>) => {
       const target = currentTarget(currentFrame);
       if (!target) return;
-      dispatch({ type: 'UPDATE_FRAME_INFO', target, info });
+      await runMutation(() =>
+        api.updateFrameInfo({
+          project: toProjectBody(stateRef.current),
+          target,
+          dateTitle: info.dateTitle,
+          description: info.description,
+          factionStats: info.factionStats,
+        }),
+      );
     },
-    [currentFrame],
+    [currentFrame, runMutation],
   );
 
   const addPaletteColor = useCallback((name: string, hex: string) => {
@@ -599,45 +414,101 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateFactionMetadata = useCallback(
-    (factionId: string, patch: { name?: string; hex?: string }) => {
-      dispatch({ type: 'UPDATE_FACTION_METADATA', factionId, ...patch });
+    async (factionId: string, patch: { name?: string; hex?: string }) => {
+      await runMutation(() =>
+        api.updateFactionMetadata({
+          project: toProjectBody(stateRef.current),
+          factionId,
+          ...patch,
+        }),
+      );
     },
-    [],
+    [runMutation],
   );
 
   const exportProject = useCallback((): ProjectExport => {
-    return stateToExport(state);
-  }, [state]);
-
-  const importProject = useCallback((data: ProjectExport, files: File[]) => {
-    dispatch({ type: 'IMPORT_PROJECT', exportData: data, files });
+    return stateToExport(stateRef.current);
   }, []);
 
+  const importProject = useCallback(
+    async (data: ProjectExport, files: File[]) => {
+      revokeFileRegistry(stateRef.current.fileRegistry);
+      const res = await api.importProject(data);
+      const sorted = Array.from(files).filter((f) => f.type.startsWith('image/'));
+      sorted.sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }),
+      );
+      const registry = buildFileRegistry(sorted);
+      const filenames = sorted.map((f) => f.name);
+      const reconciled = await api.reconcileFilenames(res.project, filenames);
+      applyMutation(reconciled);
+      if (reconciled.projectId) {
+        setProjectId(reconciled.projectId);
+        sessionStorage.setItem(PROJECT_ID_KEY, reconciled.projectId);
+      }
+      dispatch({
+        type: 'MERGE_FOLDER',
+        patch: {
+          projectName: reconciled.project.projectName,
+          assets: reconciled.project.assets,
+          timeline: reconciled.project.timeline,
+          fileRegistry: registry,
+        },
+      });
+      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
+    },
+    [applyMutation],
+  );
+
   const duplicateFrame = useCallback(
-    (sourceIndex: number, options: FrameDuplicateOptions): boolean => {
+    async (sourceIndex: number, options: FrameDuplicateOptions): Promise<boolean> => {
       if (!options.duplicateMapImage) {
         const nextMap = getNextMapFilename(
-          state.timeline,
-          state.fileRegistry,
+          stateRef.current.timeline,
+          stateRef.current.fileRegistry,
           sourceIndex,
         );
-        if (!nextMap) {
-          return false;
-        }
+        if (!nextMap) return false;
       }
-      dispatch({ type: 'DUPLICATE_FRAME', sourceIndex, options });
-      return true;
+      try {
+        await runMutation(() =>
+          api.duplicateFrame({
+            project: toProjectBody(stateRef.current),
+            sourceIndex,
+            options,
+            knownFilenames: knownFilenames(),
+          }),
+        );
+        dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
+        return true;
+      } catch {
+        return false;
+      }
     },
-    [state.timeline, state.fileRegistry],
+    [runMutation, knownFilenames],
   );
 
   const setFileCanvasSize = useCallback((filename: string, width: number, height: number) => {
     dispatch({ type: 'SET_FILE_CANVAS_SIZE', filename, width, height });
   }, []);
 
+  const saveToServer = useCallback(async () => {
+    if (!projectId) return;
+    setIsSyncing(true);
+    try {
+      await api.saveProject(projectId, toProjectBody(stateRef.current));
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [projectId]);
+
   const value = useMemo<ProjectContextValue>(
     () => ({
       state,
+      projectId,
+      apiReady,
+      apiError,
+      isSyncing,
       currentFrame,
       activeColor,
       loadFolder,
@@ -660,9 +531,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       setFileCanvasSize,
+      saveToServer,
     }),
     [
       state,
+      projectId,
+      apiReady,
+      apiError,
+      isSyncing,
       currentFrame,
       activeColor,
       loadFolder,
@@ -685,6 +561,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       setFileCanvasSize,
+      saveToServer,
     ],
   );
 

@@ -35,7 +35,7 @@ export function InfoBoard() {
   };
 
   return (
-    <aside className="panel">
+    <aside className="panel flex h-full min-h-0 flex-col overflow-hidden">
       <div className="panel-header">
         <span className="led led-cyan" aria-hidden />
         <span className="panel-bracket">::</span>
@@ -45,7 +45,7 @@ export function InfoBoard() {
         <span className="panel-bracket">::</span>
       </div>
 
-      <div className="panel-inset flex flex-1 flex-col gap-3 overflow-y-auto p-3">
+      <div className="panel-inset panel-scroll flex flex-col gap-3 p-3">
         {!currentFrame ? (
           <p className="py-8 text-center font-mono text-[10px] tracking-widest text-text-muted uppercase">
             :: Select_Frame_For_Intel ::

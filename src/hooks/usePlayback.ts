@@ -40,7 +40,7 @@ export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
         setIsPlaying(false);
         return;
       }
-      nextFrame();
+      void nextFrame();
     }, intervalMs);
 
     return () => {
@@ -55,7 +55,7 @@ export function usePlayback(intervalMs = DEFAULT_INTERVAL_MS) {
     play,
     pause,
     togglePlay,
-    goToStart: () => setTimelineIndex(0),
-    goToEnd: () => setTimelineIndex(frameCount - 1),
+    goToStart: () => void setTimelineIndex(0),
+    goToEnd: () => void setTimelineIndex(frameCount - 1),
   };
 }
