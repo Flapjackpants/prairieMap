@@ -10,7 +10,125 @@ from shapely.ops import unary_union
 from app.models.project import CountryLabelSettings, CountryTerritory
 
 MIN_REGION_AREA = 80
+ANCHOR_EPS = 2.0
 PolygonRing = list[list[float]]
+
+
+def _points_equal(a: list[float], b: list[float], eps: float = ANCHOR_EPS) -> bool:
+    return ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 <= eps
+
+
+def _remove_point_from_ring(ring: PolygonRing, point: list[float], eps: float) -> PolygonRing:
+    return [[x, y] for x, y in ring if not _points_equal([x, y], point, eps)]
+
+
+def purge_points_from_other_factions(
+    countries: list[CountryTerritory],
+    points: list[list[float]],
+    active_faction_id: str,
+    eps: float = ANCHOR_EPS,
+) -> list[CountryTerritory]:
+    """Remove anchor coordinates from every nation except the active faction."""
+    result: list[CountryTerritory] = []
+    for country in countries:
+        if country.factionId == active_faction_id:
+            result.append(country)
+            continue
+        new_regions: list[PolygonRing] = []
+        for ring in country.regions:
+            updated = ring
+            for pt in points:
+                updated = _remove_point_from_ring(updated, pt, eps)
+            if len(updated) >= 3:
+                new_regions.append(updated)
+        if not new_regions:
+            continue
+        result.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
+    return result
+
+
+def claim_anchor_at_point(
+    countries: list[CountryTerritory],
+    country_id: str,
+    x: float,
+    y: float,
+    eps: float = ANCHOR_EPS,
+) -> list[CountryTerritory]:
+    """Remove the anchor from the selected nation only (other nations unchanged)."""
+    point = [x, y]
+    result: list[CountryTerritory] = []
+    for country in countries:
+        if country.id != country_id:
+            result.append(country)
+            continue
+        new_regions: list[PolygonRing] = []
+        for ring in country.regions:
+            updated = _remove_point_from_ring(ring, point, eps)
+            if len(updated) >= 3:
+                new_regions.append(updated)
+        if not new_regions:
+            continue
+        result.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
+    return result
+
+
+def remove_vertex_from_country(
+    countries: list[CountryTerritory],
+    country_id: str,
+    ring_index: int,
+    vertex_index: int,
+) -> list[CountryTerritory]:
+    updated: list[CountryTerritory] = []
+    for country in countries:
+        if country.id != country_id:
+            updated.append(country)
+            continue
+        new_regions: list[PolygonRing] = []
+        for ri, ring in enumerate(country.regions):
+            if ri != ring_index:
+                new_regions.append(ring)
+                continue
+            if vertex_index < 0 or vertex_index >= len(ring):
+                new_regions.append(ring)
+                continue
+            trimmed = [list(pt) for pt in ring[:vertex_index] + ring[vertex_index + 1 :]]
+            if len(trimmed) >= 3:
+                new_regions.append(trimmed)
+        if not new_regions:
+            continue
+        updated.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
+    return updated
+
+
+def move_vertex_on_country(
+    countries: list[CountryTerritory],
+    country_id: str,
+    ring_index: int,
+    vertex_index: int,
+    x: float,
+    y: float,
+) -> list[CountryTerritory]:
+    updated: list[CountryTerritory] = []
+    for country in countries:
+        if country.id != country_id:
+            updated.append(country)
+            continue
+        new_regions: list[PolygonRing] = []
+        for ri, ring in enumerate(country.regions):
+            if ri != ring_index:
+                new_regions.append(ring)
+                continue
+            if vertex_index < 0 or vertex_index >= len(ring):
+                new_regions.append(ring)
+                continue
+            moved = [[float(px), float(py)] for px, py in ring]
+            moved[vertex_index] = [x, y]
+            if len(moved) >= 3:
+                new_regions.append(moved)
+        if not new_regions:
+            continue
+        updated.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
+    return updated
 
 
 def polygon_area(ring: PolygonRing) -> float:
@@ -145,6 +263,10 @@ def _polygon_to_rings(geom: Any) -> list[PolygonRing]:
         ring = [[float(x), float(y)] for x, y in ext]
         if polygon_area(ring) >= MIN_REGION_AREA:
             rings.append(ring)
+        for interior in poly.interiors:
+            hole = [[float(x), float(y)] for x, y in interior.coords][:-1]
+            if len(hole) >= 3 and polygon_area(hole) >= MIN_REGION_AREA:
+                rings.append(hole)
 
     if geom.geom_type == "Polygon":
         add_poly(geom)
@@ -198,11 +320,16 @@ def apply_territory_transfer(
     active_faction_id: str,
     faction_name: str,
     color: str,
+    target_country_id: str | None = None,
 ) -> list[CountryTerritory]:
     updated: list[CountryTerritory] = []
 
     for country in countries:
-        if country.factionId == active_faction_id:
+        if target_country_id:
+            if country.id == target_country_id:
+                updated.append(country)
+                continue
+        elif country.factionId == active_faction_id:
             updated.append(country)
             continue
         new_regions: list[PolygonRing] = []
@@ -212,7 +339,10 @@ def apply_territory_transfer(
             continue
         updated.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
 
-    active_idx = next((i for i, c in enumerate(updated) if c.factionId == active_faction_id), -1)
+    if target_country_id:
+        active_idx = next((i for i, c in enumerate(updated) if c.id == target_country_id), -1)
+    else:
+        active_idx = next((i for i, c in enumerate(updated) if c.factionId == active_faction_id), -1)
     if active_idx < 0:
         merged = union_all_regions([new_ring])
         updated.append(
@@ -230,6 +360,7 @@ def apply_territory_transfer(
                 )
             )
         )
+        active_idx = len(updated) - 1
     else:
         merged = union_all_regions([*updated[active_idx].regions, new_ring])
         updated[active_idx] = recompute_country_labels(

@@ -4,8 +4,11 @@ from fastapi import APIRouter
 
 from app.models.project import (
     AddRegionRequest,
+    ClaimAnchorRequest,
     DeleteCountryRequest,
+    MoveVertexRequest,
     ProjectMutationResponse,
+    RemoveVertexRequest,
     UpdateFactionMetadataRequest,
     UpdateFrameInfoRequest,
 )
@@ -23,6 +26,7 @@ def add_region(req: AddRegionRequest) -> ProjectMutationResponse:
         req.factionName,
         req.color,
         req.region,
+        req.targetCountryId,
     )
     return ProjectMutationResponse(project=project)
 
@@ -37,6 +41,45 @@ def delete_country(req: DeleteCountryRequest) -> ProjectMutationResponse:
 def update_faction_metadata(req: UpdateFactionMetadataRequest) -> ProjectMutationResponse:
     project = project_service.update_faction_metadata(
         req.project, req.factionId, req.name, req.hex
+    )
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/claim-anchor", response_model=ProjectMutationResponse)
+def claim_anchor(req: ClaimAnchorRequest) -> ProjectMutationResponse:
+    project = project_service.claim_anchor(
+        req.project,
+        req.target,
+        req.countryId,
+        req.x,
+        req.y,
+        req.epsilon,
+    )
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/remove-vertex", response_model=ProjectMutationResponse)
+def remove_vertex(req: RemoveVertexRequest) -> ProjectMutationResponse:
+    project = project_service.remove_territory_vertex(
+        req.project,
+        req.target,
+        req.countryId,
+        req.ringIndex,
+        req.vertexIndex,
+    )
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/move-vertex", response_model=ProjectMutationResponse)
+def move_vertex(req: MoveVertexRequest) -> ProjectMutationResponse:
+    project = project_service.move_territory_vertex(
+        req.project,
+        req.target,
+        req.countryId,
+        req.ringIndex,
+        req.vertexIndex,
+        req.x,
+        req.y,
     )
     return ProjectMutationResponse(project=project)
 

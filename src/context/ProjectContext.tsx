@@ -36,6 +36,17 @@ import { resolveCurrentFrame } from '../utils/projectHelpers';
 import { stateToExport } from '../utils/exportSchema';
 
 const PROJECT_ID_KEY = 'prairiemap-project-id';
+const MAX_UNDO_HISTORY = 50;
+
+function cloneProjectBody(body: ReturnType<typeof toProjectBody>): ReturnType<typeof toProjectBody> {
+  return structuredClone(body);
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+}
 
 type UiAction =
   | { type: 'APPLY_SERVER'; body: ReturnType<typeof toProjectBody> }
@@ -148,6 +159,15 @@ interface ProjectContextValue {
   toggleCarryLabels: () => void;
   setViewport: (viewport: ViewportState) => void;
   addTerritoryRegion: (region: PolygonRing) => Promise<void>;
+  claimAnchor: (x: number, y: number) => Promise<void>;
+  removeTerritoryVertex: (countryId: string, ringIndex: number, vertexIndex: number) => Promise<void>;
+  moveTerritoryVertex: (
+    countryId: string,
+    ringIndex: number,
+    vertexIndex: number,
+    x: number,
+    y: number,
+  ) => Promise<void>;
   deleteCountry: (countryId: string) => Promise<void>;
   setSelectedCountry: (countryId: string | null) => void;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
@@ -158,6 +178,10 @@ interface ProjectContextValue {
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
   setFileCanvasSize: (filename: string, width: number, height: number) => void;
   saveToServer: () => Promise<void>;
+  undo: () => Promise<void>;
+  redo: () => Promise<void>;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -175,8 +199,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [apiReady, setApiReady] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [historyTick, setHistoryTick] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const undoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
+  const redoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
+  const restoringRef = useRef(false);
+
+  const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
+
+  const clearHistory = useCallback(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    bumpHistory();
+  }, [bumpHistory]);
+
+  const canUndo = undoStackRef.current.length > 0;
+  const canRedo = redoStackRef.current.length > 0;
 
   const applyMutation = useCallback((res: api.ProjectMutationResponse) => {
     dispatch({ type: 'APPLY_SERVER', body: res.project });
@@ -186,12 +225,45 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const restoreProjectBody = useCallback(
+    async (body: ReturnType<typeof toProjectBody>) => {
+      const id = projectId;
+      if (!id) return;
+      restoringRef.current = true;
+      setIsSyncing(true);
+      setApiError(null);
+      try {
+        const res = await api.saveProject(id, body);
+        applyMutation(res);
+      } catch (e) {
+        const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'API error';
+        setApiError(msg);
+        throw e;
+      } finally {
+        restoringRef.current = false;
+        setIsSyncing(false);
+      }
+    },
+    [projectId, applyMutation],
+  );
+
   const runMutation = useCallback(
     async (fn: () => Promise<api.ProjectMutationResponse>) => {
+      const snapshot = restoringRef.current
+        ? null
+        : cloneProjectBody(toProjectBody(stateRef.current));
       setIsSyncing(true);
       setApiError(null);
       try {
         const res = await fn();
+        if (snapshot) {
+          undoStackRef.current.push(snapshot);
+          if (undoStackRef.current.length > MAX_UNDO_HISTORY) {
+            undoStackRef.current.shift();
+          }
+          redoStackRef.current = [];
+          bumpHistory();
+        }
         applyMutation(res);
       } catch (e) {
         const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'API error';
@@ -201,8 +273,43 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setIsSyncing(false);
       }
     },
-    [applyMutation],
+    [applyMutation, bumpHistory],
   );
+
+  const undo = useCallback(async () => {
+    if (undoStackRef.current.length === 0 || !projectId || isSyncing) return;
+    const previous = undoStackRef.current.pop()!;
+    redoStackRef.current.push(cloneProjectBody(toProjectBody(stateRef.current)));
+    bumpHistory();
+    await restoreProjectBody(previous);
+  }, [projectId, isSyncing, restoreProjectBody, bumpHistory]);
+
+  const redo = useCallback(async () => {
+    if (redoStackRef.current.length === 0 || !projectId || isSyncing) return;
+    const next = redoStackRef.current.pop()!;
+    undoStackRef.current.push(cloneProjectBody(toProjectBody(stateRef.current)));
+    bumpHistory();
+    await restoreProjectBody(next);
+  }, [projectId, isSyncing, restoreProjectBody, bumpHistory]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditableTarget(e.target)) return;
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        void undo();
+        return;
+      }
+      if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        void redo();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [undo, redo]);
 
   useEffect(() => {
     let cancelled = false;
@@ -215,7 +322,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         if (storedId) {
           try {
             const body = await api.getProject(storedId);
-            if (!cancelled) dispatch({ type: 'APPLY_SERVER', body });
+            if (!cancelled) {
+              dispatch({ type: 'APPLY_SERVER', body });
+              clearHistory();
+            }
             setProjectId(storedId);
             return;
           } catch {
@@ -225,6 +335,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         const created = await api.createProject();
         if (!cancelled) {
           applyMutation(created);
+          clearHistory();
         }
       } catch {
         if (!cancelled) {
@@ -236,7 +347,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applyMutation]);
+  }, [applyMutation, clearHistory]);
 
   const currentFrame = useMemo(() => resolveCurrentFrame(state), [state]);
   const activeColor = state.palette.find((c) => c.id === state.activeColorId);
@@ -270,6 +381,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           },
         });
         dispatch({ type: 'APPLY_SERVER', body: res.project });
+        clearHistory();
       } else {
         const reconciled = reconcileFolderWithProject(fileArr, {
           assets: stateRef.current.assets,
@@ -289,10 +401,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           },
         });
         dispatch({ type: 'APPLY_SERVER', body: res.project });
+        clearHistory();
         void reconciled;
       }
     },
-    [],
+    [clearHistory],
   );
 
   const setTimelineIndex = useCallback(
@@ -351,20 +464,91 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const addTerritoryRegion = useCallback(
     async (region: PolygonRing) => {
       const target = currentTarget(currentFrame);
-      const faction = activeColor;
-      if (!target || !faction) return;
+      if (!target) return;
+      const frame = resolveCurrentFrame(stateRef.current);
+      const selectedId = stateRef.current.selectedCountryId;
+      const selectedCountry = selectedId
+        ? frame?.frameData.annotations.countries.find((c) => c.id === selectedId)
+        : undefined;
+      const paletteFaction = activeColor;
+      if (!selectedCountry && !paletteFaction) return;
+      const factionId = selectedCountry?.factionId ?? paletteFaction!.id;
+      const factionName = selectedCountry?.name ?? paletteFaction!.name;
+      const color = selectedCountry?.color ?? paletteFaction!.hex;
       await runMutation(() =>
         api.addTerritoryRegion({
           project: toProjectBody(stateRef.current),
           target,
-          factionId: faction.id,
-          factionName: faction.name,
-          color: faction.hex,
+          factionId,
+          factionName,
+          color,
           region,
+          targetCountryId: selectedId,
         }),
       );
     },
     [currentFrame, activeColor, runMutation],
+  );
+
+  const claimAnchor = useCallback(
+    async (x: number, y: number) => {
+      const target = currentTarget(currentFrame);
+      const countryId = stateRef.current.selectedCountryId;
+      if (!target || !countryId) return;
+      await runMutation(() =>
+        api.claimAnchor({
+          project: toProjectBody(stateRef.current),
+          target,
+          countryId,
+          x,
+          y,
+          epsilon: 2,
+        }),
+      );
+    },
+    [currentFrame, runMutation],
+  );
+
+  const removeTerritoryVertex = useCallback(
+    async (countryId: string, ringIndex: number, vertexIndex: number) => {
+      const target = currentTarget(currentFrame);
+      if (!target) return;
+      await runMutation(() =>
+        api.removeTerritoryVertex({
+          project: toProjectBody(stateRef.current),
+          target,
+          countryId,
+          ringIndex,
+          vertexIndex,
+        }),
+      );
+    },
+    [currentFrame, runMutation],
+  );
+
+  const moveTerritoryVertex = useCallback(
+    async (
+      countryId: string,
+      ringIndex: number,
+      vertexIndex: number,
+      x: number,
+      y: number,
+    ) => {
+      const target = currentTarget(currentFrame);
+      if (!target) return;
+      await runMutation(() =>
+        api.moveTerritoryVertex({
+          project: toProjectBody(stateRef.current),
+          target,
+          countryId,
+          ringIndex,
+          vertexIndex,
+          x,
+          y,
+        }),
+      );
+    },
+    [currentFrame, runMutation],
   );
 
   const deleteCountry = useCallback(
@@ -442,6 +626,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       const filenames = sorted.map((f) => f.name);
       const reconciled = await api.reconcileFilenames(res.project, filenames);
       applyMutation(reconciled);
+      clearHistory();
       if (reconciled.projectId) {
         setProjectId(reconciled.projectId);
         sessionStorage.setItem(PROJECT_ID_KEY, reconciled.projectId);
@@ -457,7 +642,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       });
       dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
     },
-    [applyMutation],
+    [applyMutation, clearHistory],
   );
 
   const duplicateFrame = useCallback(
@@ -522,6 +707,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       toggleCarryLabels,
       setViewport,
       addTerritoryRegion,
+      claimAnchor,
+      removeTerritoryVertex,
+      moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
       updateFrameInfo,
@@ -532,6 +720,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       duplicateFrame,
       setFileCanvasSize,
       saveToServer,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
     }),
     [
       state,
@@ -552,6 +744,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       toggleCarryLabels,
       setViewport,
       addTerritoryRegion,
+      claimAnchor,
+      removeTerritoryVertex,
+      moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
       updateFrameInfo,
@@ -562,6 +757,11 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       duplicateFrame,
       setFileCanvasSize,
       saveToServer,
+      undo,
+      redo,
+      canUndo,
+      canRedo,
+      historyTick,
     ],
   );
 

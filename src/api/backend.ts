@@ -48,6 +48,7 @@ export async function addTerritoryRegion(params: {
   factionName: string;
   color: string;
   region: PolygonRing;
+  targetCountryId?: string | null;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/add-region', {
     method: 'POST',
@@ -73,6 +74,48 @@ export async function updateFactionMetadata(params: {
   hex?: string;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/update-faction-metadata', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function claimAnchor(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  countryId: string;
+  x: number;
+  y: number;
+  epsilon?: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/claim-anchor', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function removeTerritoryVertex(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  countryId: string;
+  ringIndex: number;
+  vertexIndex: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/remove-vertex', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function moveTerritoryVertex(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  countryId: string;
+  ringIndex: number;
+  vertexIndex: number;
+  x: number;
+  y: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/move-vertex', {
     method: 'POST',
     body: JSON.stringify(params),
   });

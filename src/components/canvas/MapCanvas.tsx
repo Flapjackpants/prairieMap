@@ -42,12 +42,15 @@ export function MapCanvas() {
     activeColor,
     setViewport,
     addTerritoryRegion,
+    claimAnchor,
+    removeTerritoryVertex,
+    moveTerritoryVertex,
     setSelectedCountry,
     setFileCanvasSize,
     setTool,
   } = useProject();
 
-  const { tool, viewport, selectedCountryId } = state;
+  const { tool, viewport, selectedCountryId, activeColorId } = state;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -64,6 +67,8 @@ export function MapCanvas() {
 
   const isPanMode = tool === 'pan' || spaceHeld;
   const isAreaSelect = tool === 'areaSelect' && !isPanMode;
+  const isSelect = tool === 'select' && !isPanMode;
+  const showAnchorHandles = (isAreaSelect || isSelect) && !isPanMode;
   const snapThreshold = SNAP_THRESHOLD_PX / Math.max(viewport.scale, 0.15);
 
   useEffect(() => {
@@ -211,7 +216,7 @@ export function MapCanvas() {
     }
 
     const { x, y } = resolveSnap(raw);
-    setDraftPoints((pts) => [...pts, { x, y }]);
+    appendDraftPoint(x, y);
   };
 
   const handleStageDblClick = () => {
@@ -222,6 +227,25 @@ export function MapCanvas() {
   const removeDraftAnchor = (index: number) => {
     setDraftPoints((pts) => pts.filter((_, i) => i !== index));
   };
+
+  const appendDraftPoint = useCallback((x: number, y: number) => {
+    setDraftPoints((pts) => {
+      const last = pts[pts.length - 1];
+      if (last && Math.hypot(last.x - x, last.y - y) < 0.5) return pts;
+      return [...pts, { x, y }];
+    });
+  }, []);
+
+  const handleAnchorPick = useCallback(
+    (x: number, y: number) => {
+      if (isAreaSelect) {
+        appendDraftPoint(x, y);
+        return;
+      }
+      if (selectedCountryId) void claimAnchor(x, y);
+    },
+    [isAreaSelect, appendDraftPoint, selectedCountryId, claimAnchor],
+  );
 
   const fitToView = useCallback(() => {
     if (!image || !containerRef.current) return;
@@ -388,6 +412,8 @@ export function MapCanvas() {
                 <TerritoryLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
+                  activeFactionId={activeColorId}
+                  showAnchorHandles={showAnchorHandles}
                   draftPoints={draftPoints}
                   draftColor={activeColor?.hex ?? '#00e5ff'}
                   cursorPoint={cursorPoint}
@@ -397,6 +423,13 @@ export function MapCanvas() {
                     setTool('select');
                   }}
                   onRemoveDraftAnchor={removeDraftAnchor}
+                  onClaimAnchor={handleAnchorPick}
+                  onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>
+                    void removeTerritoryVertex(countryId, ringIndex, vertexIndex)
+                  }
+                  onMoveTerritoryVertex={(countryId, ringIndex, vertexIndex, x, y) =>
+                    void moveTerritoryVertex(countryId, ringIndex, vertexIndex, x, y)
+                  }
                 />
               </Layer>
             </Stage>

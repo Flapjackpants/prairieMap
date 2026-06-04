@@ -22,6 +22,7 @@ export function CountryTerritoryShape({
     <>
       <Shape
         fill={country.color}
+        fillRule="evenodd"
         opacity={TERRITORY_FILL_OPACITY}
         listening
         onClick={onSelect}

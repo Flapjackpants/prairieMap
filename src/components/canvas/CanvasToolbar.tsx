@@ -108,7 +108,12 @@ export function CanvasToolbar() {
 
       {tool === 'areaSelect' && activeFaction && (
         <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
-          Draw::{activeFaction.name.toUpperCase()} · Enter=close · Alt=rm anchor · overlap=transfer
+          Draw::select nation · anchors extend (no trim) · Overlap=transfer · Enter=close
+        </p>
+      )}
+      {tool === 'select' && activeFaction && (
+        <p className="max-w-md border border-accent-orange/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-orange uppercase shadow-lg">
+          Anchors: click=remove from selected nation · Drag=move · Alt+click=delete
         </p>
       )}
     </div>

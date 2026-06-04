@@ -12,7 +12,13 @@ from app.models.project import (
 )
 from app.services.clone import clone_annotations, clone_asset_state, clone_frame_info
 from app.services.export_schema import create_empty_annotations, create_empty_asset_state, create_empty_frame_info
-from app.services.geometry import apply_territory_transfer, recompute_country_labels
+from app.services.geometry import (
+    apply_territory_transfer,
+    claim_anchor_at_point,
+    move_vertex_on_country,
+    recompute_country_labels,
+    remove_vertex_from_country,
+)
 from app.services.export_schema import (
     create_initial_assets_from_files,
     create_timeline_from_files,
@@ -157,6 +163,7 @@ def add_territory_region(
     faction_name: str,
     color: str,
     region: PolygonRing,
+    target_country_id: str | None = None,
 ) -> ProjectBody:
     assets = update_asset_at(
         project.assets,
@@ -170,6 +177,87 @@ def add_territory_region(
                         faction_id,
                         faction_name,
                         color,
+                        target_country_id,
+                    )
+                }
+            }
+        ),
+    )
+    return project.model_copy(update={"assets": assets})
+
+
+def claim_anchor(
+    project: ProjectBody,
+    target: AssetTarget,
+    country_id: str,
+    x: float,
+    y: float,
+    epsilon: float = 2.0,
+) -> ProjectBody:
+    assets = update_asset_at(
+        project.assets,
+        target,
+        lambda s: s.model_copy(
+            update={
+                "annotations": {
+                    "countries": claim_anchor_at_point(
+                        s.annotations.countries, country_id, x, y, epsilon
+                    )
+                }
+            }
+        ),
+    )
+    return project.model_copy(update={"assets": assets})
+
+
+def remove_territory_vertex(
+    project: ProjectBody,
+    target: AssetTarget,
+    country_id: str,
+    ring_index: int,
+    vertex_index: int,
+) -> ProjectBody:
+    assets = update_asset_at(
+        project.assets,
+        target,
+        lambda s: s.model_copy(
+            update={
+                "annotations": {
+                    "countries": remove_vertex_from_country(
+                        s.annotations.countries,
+                        country_id,
+                        ring_index,
+                        vertex_index,
+                    )
+                }
+            }
+        ),
+    )
+    return project.model_copy(update={"assets": assets})
+
+
+def move_territory_vertex(
+    project: ProjectBody,
+    target: AssetTarget,
+    country_id: str,
+    ring_index: int,
+    vertex_index: int,
+    x: float,
+    y: float,
+) -> ProjectBody:
+    assets = update_asset_at(
+        project.assets,
+        target,
+        lambda s: s.model_copy(
+            update={
+                "annotations": {
+                    "countries": move_vertex_on_country(
+                        s.annotations.countries,
+                        country_id,
+                        ring_index,
+                        vertex_index,
+                        x,
+                        y,
                     )
                 }
             }

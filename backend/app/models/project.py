@@ -103,6 +103,7 @@ class AddRegionRequest(BaseModel):
     factionName: str
     color: str
     region: list[list[float]]
+    targetCountryId: str | None = None
 
 
 class DeleteCountryRequest(BaseModel):
@@ -152,6 +153,33 @@ class UpdateFrameInfoRequest(BaseModel):
     dateTitle: str | None = None
     description: str | None = None
     factionStats: list[FactionStat] | None = None
+
+
+class ClaimAnchorRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    countryId: str
+    x: float
+    y: float
+    epsilon: float = 2.0
+
+
+class RemoveVertexRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    countryId: str
+    ringIndex: int
+    vertexIndex: int
+
+
+class MoveVertexRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    countryId: str
+    ringIndex: int
+    vertexIndex: int
+    x: float
+    y: float
 
 
 class ProjectMutationResponse(BaseModel):
