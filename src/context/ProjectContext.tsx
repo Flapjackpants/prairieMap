@@ -15,7 +15,10 @@ import { ApiError, apiHealth } from '../api/client';
 import {
   DEFAULT_PALETTE,
   type FrameDuplicateOptions,
+  type CityMarker,
+  type DivisionMarker,
   type FrameInfo,
+  type MarkerKind,
   type PaletteColor,
   type PolygonRing,
   type ProjectExport,
@@ -23,6 +26,7 @@ import {
   type ResolvedFrame,
   type ToolMode,
   type ViewportState,
+  DEFAULT_DIVISION_MARKER_SIZE,
 } from '../types/project';
 import { mergeServerProject, toProjectBody } from '../types/projectBody';
 import { getNextMapFilename } from '../utils/projectHelpers';
@@ -57,6 +61,11 @@ type UiAction =
   | { type: 'TOGGLE_CARRY_LABELS' }
   | { type: 'SET_VIEWPORT'; viewport: ViewportState }
   | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
+  | {
+      type: 'SET_SELECTED_MARKER';
+      markerId: string | null;
+      markerKind: MarkerKind | null;
+    }
   | { type: 'SET_FILE_CANVAS_SIZE'; filename: string; width: number; height: number }
   | { type: 'ADD_PALETTE_COLOR'; color: PaletteColor }
   | { type: 'CLEAR_PROJECT' };
@@ -73,6 +82,8 @@ const initialState: ProjectState = {
   carryOverLabels: true,
   viewport: { scale: 1, x: 0, y: 0 },
   selectedCountryId: null,
+  selectedMarkerId: null,
+  selectedMarkerKind: null,
 };
 
 function uiReducer(state: ProjectState, action: UiAction): ProjectState {
@@ -102,7 +113,19 @@ function uiReducer(state: ProjectState, action: UiAction): ProjectState {
     case 'SET_VIEWPORT':
       return { ...state, viewport: action.viewport };
     case 'SET_SELECTED_COUNTRY':
-      return { ...state, selectedCountryId: action.countryId };
+      return {
+        ...state,
+        selectedCountryId: action.countryId,
+        selectedMarkerId: null,
+        selectedMarkerKind: null,
+      };
+    case 'SET_SELECTED_MARKER':
+      return {
+        ...state,
+        selectedMarkerId: action.markerId,
+        selectedMarkerKind: action.markerKind,
+        selectedCountryId: action.markerId ? null : state.selectedCountryId,
+      };
     case 'SET_FILE_CANVAS_SIZE': {
       const entry = state.fileRegistry[action.filename];
       if (
@@ -170,6 +193,17 @@ interface ProjectContextValue {
   ) => Promise<void>;
   deleteCountry: (countryId: string) => Promise<void>;
   setSelectedCountry: (countryId: string | null) => void;
+  setSelectedMarker: (markerId: string | null, kind: MarkerKind | null) => void;
+  upsertMarkers: (cities: CityMarker[], divisions: DivisionMarker[]) => Promise<void>;
+  addCityMarker: (x: number, y: number, name: string) => Promise<string | null>;
+  updateCityMarker: (id: string, patch: Partial<Pick<CityMarker, 'x' | 'y' | 'name'>>) => Promise<void>;
+  removeCityMarker: (id: string) => Promise<void>;
+  addDivisionMarker: (x: number, y: number) => Promise<string | null>;
+  updateDivisionMarker: (
+    id: string,
+    patch: Partial<Omit<DivisionMarker, 'id'>>,
+  ) => Promise<void>;
+  removeDivisionMarker: (id: string) => Promise<void>;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => void;
   updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
@@ -573,6 +607,124 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_SELECTED_COUNTRY', countryId });
   }, []);
 
+  const setSelectedMarker = useCallback((markerId: string | null, kind: MarkerKind | null) => {
+    dispatch({ type: 'SET_SELECTED_MARKER', markerId, markerKind: kind });
+  }, []);
+
+  const upsertMarkers = useCallback(
+    async (cities: CityMarker[], divisions: DivisionMarker[]) => {
+      const target = currentTarget(currentFrame);
+      if (!target) return;
+      await runMutation(() =>
+        api.upsertMarkers({
+          project: toProjectBody(stateRef.current),
+          target,
+          cities,
+          divisions,
+        }),
+      );
+    },
+    [currentFrame, runMutation],
+  );
+
+  const addCityMarker = useCallback(
+    async (x: number, y: number, name: string) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return null;
+      const id = uuidv4();
+      const cities = [
+        ...frame.frameData.annotations.cities,
+        { id, x, y, name: name.trim() || 'City' },
+      ];
+      await upsertMarkers(cities, frame.frameData.annotations.divisions);
+      setSelectedMarker(id, 'city');
+      return id;
+    },
+    [upsertMarkers, setSelectedMarker],
+  );
+
+  const updateCityMarker = useCallback(
+    async (id: string, patch: Partial<Pick<CityMarker, 'x' | 'y' | 'name'>>) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      const cities = frame.frameData.annotations.cities.map((c) =>
+        c.id === id ? { ...c, ...patch } : c,
+      );
+      await upsertMarkers(cities, frame.frameData.annotations.divisions);
+    },
+    [upsertMarkers],
+  );
+
+  const removeCityMarker = useCallback(
+    async (id: string) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      const cities = frame.frameData.annotations.cities.filter((c) => c.id !== id);
+      await upsertMarkers(cities, frame.frameData.annotations.divisions);
+      if (stateRef.current.selectedMarkerId === id) {
+        setSelectedMarker(null, null);
+      }
+    },
+    [upsertMarkers, setSelectedMarker],
+  );
+
+  const addDivisionMarker = useCallback(
+    async (x: number, y: number) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return null;
+      const filenames = Object.keys(stateRef.current.assets).filter(
+        (f) => !f.startsWith('__blank__/'),
+      );
+      const sourceFilename = filenames[0] ?? '';
+      const id = uuidv4();
+      const divisions = [
+        ...frame.frameData.annotations.divisions,
+        {
+          id,
+          x,
+          y,
+          size: DEFAULT_DIVISION_MARKER_SIZE,
+          sourceFilename,
+          crop: { x: 0, y: 0, width: 64, height: 64 },
+        },
+      ];
+      await upsertMarkers(frame.frameData.annotations.cities, divisions);
+      setSelectedMarker(id, 'division');
+      return id;
+    },
+    [upsertMarkers, setSelectedMarker],
+  );
+
+  const updateDivisionMarker = useCallback(
+    async (id: string, patch: Partial<Omit<DivisionMarker, 'id'>>) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      const divisions = frame.frameData.annotations.divisions.map((d) => {
+        if (d.id !== id) return d;
+        return {
+          ...d,
+          ...patch,
+          crop: patch.crop ? { ...d.crop, ...patch.crop } : d.crop,
+        };
+      });
+      await upsertMarkers(frame.frameData.annotations.cities, divisions);
+    },
+    [upsertMarkers],
+  );
+
+  const removeDivisionMarker = useCallback(
+    async (id: string) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      const divisions = frame.frameData.annotations.divisions.filter((d) => d.id !== id);
+      await upsertMarkers(frame.frameData.annotations.cities, divisions);
+      if (stateRef.current.selectedMarkerId === id) {
+        setSelectedMarker(null, null);
+      }
+    },
+    [upsertMarkers, setSelectedMarker],
+  );
+
   const updateFrameInfo = useCallback(
     async (info: Partial<FrameInfo>) => {
       const target = currentTarget(currentFrame);
@@ -712,6 +864,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
+      setSelectedMarker,
+      upsertMarkers,
+      addCityMarker,
+      updateCityMarker,
+      removeCityMarker,
+      addDivisionMarker,
+      updateDivisionMarker,
+      removeDivisionMarker,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,
@@ -749,6 +909,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       moveTerritoryVertex,
       deleteCountry,
       setSelectedCountry,
+      setSelectedMarker,
+      upsertMarkers,
+      addCityMarker,
+      updateCityMarker,
+      removeCityMarker,
+      addDivisionMarker,
+      updateDivisionMarker,
+      removeDivisionMarker,
       updateFrameInfo,
       addPaletteColor,
       updateFactionMetadata,

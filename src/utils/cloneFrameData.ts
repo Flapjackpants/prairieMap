@@ -38,6 +38,8 @@ function cloneFactionStat(stat: FactionStat): FactionStat {
 export function cloneAnnotations(source: FrameAnnotations): FrameAnnotations {
   return {
     countries: source.countries.map(cloneCountry),
+    cities: source.cities.map((c) => ({ ...c, id: uuidv4() })),
+    divisions: source.divisions.map((d) => ({ ...d, id: uuidv4(), crop: { ...d.crop } })),
   };
 }
 

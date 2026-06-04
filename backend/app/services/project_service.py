@@ -6,6 +6,8 @@ from app.models.project import (
     BLANK_ASSET_PREFIX,
     AssetFrameState,
     AssetTarget,
+    CityMarker,
+    DivisionMarker,
     FrameDuplicateOptions,
     ProjectBody,
     TimelineEntry,
@@ -266,15 +268,39 @@ def move_territory_vertex(
     return project.model_copy(update={"assets": assets})
 
 
+def upsert_markers(
+    project: ProjectBody,
+    target: AssetTarget,
+    cities: list[CityMarker],
+    divisions: list[DivisionMarker],
+) -> ProjectBody:
+    assets = update_asset_at(
+        project.assets,
+        target,
+        lambda s: s.model_copy(
+            update={
+                "annotations": s.annotations.model_copy(
+                    update={"cities": cities, "divisions": divisions}
+                )
+            }
+        ),
+    )
+    return project.model_copy(update={"assets": assets})
+
+
 def delete_country(project: ProjectBody, target: AssetTarget, country_id: str) -> ProjectBody:
     assets = update_asset_at(
         project.assets,
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": {
-                    "countries": [c for c in s.annotations.countries if c.id != country_id]
-                }
+                "annotations": s.annotations.model_copy(
+                    update={
+                        "countries": [
+                            c for c in s.annotations.countries if c.id != country_id
+                        ]
+                    }
+                )
             }
         ),
     )

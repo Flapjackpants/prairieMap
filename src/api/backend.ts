@@ -106,6 +106,18 @@ export async function removeTerritoryVertex(params: {
   });
 }
 
+export async function upsertMarkers(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  cities: import('../types/project').CityMarker[];
+  divisions: import('../types/project').DivisionMarker[];
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/upsert-markers', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function moveTerritoryVertex(params: {
   project: ProjectBody;
   target: { filename: string; copyIndex: number };

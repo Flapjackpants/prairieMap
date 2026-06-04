@@ -1,14 +1,20 @@
-import { Hand, Hexagon, Link2, MousePointer2, Plus, Trash2 } from 'lucide-react';
+import { Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
 
 const TOOLS: { id: ToolMode; icon: typeof Hand; label: string; shortcut: string }[] = [
   { id: 'pan', icon: Hand, label: 'Pan (Space or middle-drag)', shortcut: 'PAN' },
   { id: 'areaSelect', icon: Hexagon, label: 'Area select — click anchors, Enter to close', shortcut: 'SEL' },
-  { id: 'select', icon: MousePointer2, label: 'Select territory', shortcut: 'PTR' },
+  { id: 'select', icon: MousePointer2, label: 'Select territory / markers', shortcut: 'PTR' },
+  { id: 'city', icon: MapPin, label: 'Place city marker', shortcut: 'CTY' },
+  { id: 'division', icon: Shield, label: 'Place division marker', shortcut: 'DIV' },
 ];
 
-export function CanvasToolbar() {
+interface CanvasToolbarProps {
+  onEditDivisionCrop?: (divisionId: string) => void;
+}
+
+export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
   const {
     state,
     setTool,
@@ -89,6 +95,17 @@ export function CanvasToolbar() {
           <Link2 className="h-3.5 w-3.5" />
         </button>
 
+        {state.selectedMarkerKind === 'division' && state.selectedMarkerId && onEditDivisionCrop && (
+          <button
+            type="button"
+            title="Edit division crop"
+            className="btn-icon h-8 px-2 font-mono text-[8px] tracking-wider"
+            onClick={() => onEditDivisionCrop(state.selectedMarkerId!)}
+          >
+            CROP
+          </button>
+        )}
+
         {selectedCountryId && (
           <button
             type="button"
@@ -113,7 +130,17 @@ export function CanvasToolbar() {
       )}
       {tool === 'select' && activeFaction && (
         <p className="max-w-md border border-accent-orange/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-orange uppercase shadow-lg">
-          Anchors: click=remove from selected nation · Drag=move · Alt+click=delete
+          Select: nations · markers (drag) · anchors on nation
+        </p>
+      )}
+      {tool === 'city' && (
+        <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
+          Click map to place city · name prompt
+        </p>
+      )}
+      {tool === 'division' && (
+        <p className="max-w-md border border-accent-cyan/30 bg-surface-overlay/95 px-3 py-1 font-mono text-[9px] tracking-wide text-accent-cyan uppercase shadow-lg">
+          Click map to place division · crop editor opens
         </p>
       )}
     </div>

@@ -11,6 +11,7 @@ from app.models.project import (
     RemoveVertexRequest,
     UpdateFactionMetadataRequest,
     UpdateFrameInfoRequest,
+    UpsertMarkersRequest,
 )
 from app.services import project_service
 
@@ -80,6 +81,14 @@ def move_vertex(req: MoveVertexRequest) -> ProjectMutationResponse:
         req.vertexIndex,
         req.x,
         req.y,
+    )
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/upsert-markers", response_model=ProjectMutationResponse)
+def upsert_markers(req: UpsertMarkersRequest) -> ProjectMutationResponse:
+    project = project_service.upsert_markers(
+        req.project, req.target, req.cities, req.divisions
     )
     return ProjectMutationResponse(project=project)
 

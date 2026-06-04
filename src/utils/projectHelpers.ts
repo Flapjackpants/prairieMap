@@ -10,6 +10,7 @@ import {
   createEmptyAssetState,
   DEFAULT_CANVAS_SIZE,
   isBlankAssetKey,
+  normalizeAnnotations,
 } from '../types/project';
 
 export function getAssetState(
@@ -68,7 +69,10 @@ export function resolveTimelineEntry(
     file: registryEntry.file,
     canvasWidth: registryEntry.canvasWidth,
     canvasHeight: registryEntry.canvasHeight,
-    frameData: getAssetState(state.assets, entry.filename, entry.copyIndex),
+    frameData: (() => {
+      const raw = getAssetState(state.assets, entry.filename, entry.copyIndex);
+      return { ...raw, annotations: normalizeAnnotations(raw.annotations) };
+    })(),
   };
 }
 

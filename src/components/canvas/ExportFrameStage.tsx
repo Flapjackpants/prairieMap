@@ -1,12 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from 'react-konva';
 import type Konva from 'konva';
-import type { CountryTerritory } from '../../types/project';
+import type { CityMarker, CountryTerritory, DivisionMarker } from '../../types/project';
 import {
   estimateEventLogLines,
   formatEventLogForExport,
 } from '../../utils/formatEventLogExport';
 import { TerritoryLayer } from './TerritoryLayer';
+import { MarkerLayer } from './MarkerLayer';
 
 export interface ExportFrameSnapshot {
   width: number;
@@ -15,6 +16,8 @@ export interface ExportFrameSnapshot {
   mapHeight: number;
   image: HTMLImageElement | null;
   countries: CountryTerritory[];
+  cities: CityMarker[];
+  divisions: DivisionMarker[];
   dateTitle: string;
   eventLog: string;
 }
@@ -129,6 +132,16 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
               onClaimAnchor={() => {}}
               onRemoveTerritoryVertex={() => {}}
               onMoveTerritoryVertex={() => {}}
+            />
+            <MarkerLayer
+              cities={snapshot.cities}
+              divisions={snapshot.divisions}
+              selectedMarkerId={null}
+              selectedMarkerKind={null}
+              interactive={false}
+              onSelectMarker={() => {}}
+              onMoveCity={() => {}}
+              onMoveDivision={() => {}}
             />
           </Group>
 

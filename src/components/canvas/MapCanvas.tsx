@@ -10,6 +10,8 @@ import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../util
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import { TerritoryLayer } from './TerritoryLayer';
+import { MarkerLayer } from './MarkerLayer';
+import { DivisionCropModal } from './DivisionCropModal';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
@@ -46,10 +48,17 @@ export function MapCanvas() {
     removeTerritoryVertex,
     moveTerritoryVertex,
     setSelectedCountry,
+    setSelectedMarker,
+    addCityMarker,
+    addDivisionMarker,
+    updateCityMarker,
+    updateDivisionMarker,
     setFileCanvasSize,
   } = useProject();
 
-  const { tool, viewport, selectedCountryId, activeColorId } = state;
+  const { tool, viewport, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
+    state;
+  const [cropDivisionId, setCropDivisionId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -75,7 +84,12 @@ export function MapCanvas() {
   const isPointerPanning = isKonvaPanDrag || middlePanHeld;
   const isAreaSelect = tool === 'areaSelect' && !isPointerPanning;
   const isSelect = tool === 'select' && !isPointerPanning;
+  const isCityTool = tool === 'city' && !isPointerPanning;
+  const isDivisionTool = tool === 'division' && !isPointerPanning;
+  const isMarkerInteractive = (isSelect || isCityTool || isDivisionTool) && !isPointerPanning;
   const showAnchorHandles = (isAreaSelect || isSelect) && !isPointerPanning;
+  const cities = currentFrame?.frameData.annotations.cities ?? [];
+  const divisions = currentFrame?.frameData.annotations.divisions ?? [];
   const snapThreshold = SNAP_THRESHOLD_PX / Math.max(viewport.scale, 0.15);
 
   useEffect(() => {
@@ -275,11 +289,24 @@ export function MapCanvas() {
   };
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!isAreaSelect || !activeColor) return;
-
     const raw = getPointerOnImage();
     if (!raw) return;
 
+    if (isCityTool) {
+      const name = window.prompt('City name:', 'City');
+      if (name === null) return;
+      void addCityMarker(raw.x, raw.y, name);
+      return;
+    }
+
+    if (isDivisionTool) {
+      void addDivisionMarker(raw.x, raw.y).then((id) => {
+        if (id) setCropDivisionId(id);
+      });
+      return;
+    }
+
+    if (!isAreaSelect || !activeColor) return;
     if (e.evt.altKey) {
       const draftHit = draftPoints.findIndex(
         (p) => Math.hypot(p.x - raw.x, p.y - raw.y) <= snapThreshold,
@@ -382,7 +409,9 @@ export function MapCanvas() {
         : 'crosshair'
       : tool === 'select'
         ? 'pointer'
-        : 'default';
+        : isCityTool || isDivisionTool
+          ? 'crosshair'
+          : 'default';
 
   return (
     <main className="panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -430,11 +459,11 @@ export function MapCanvas() {
             <p className="max-w-sm font-mono text-[10px] leading-relaxed tracking-wide text-text-muted uppercase">
               Reload folder or restore image to edit this frame.
             </p>
-            <CanvasToolbar />
+            <CanvasToolbar onEditDivisionCrop={(id) => setCropDivisionId(id)} />
           </div>
         ) : (
           <>
-            <CanvasToolbar />
+            <CanvasToolbar onEditDivisionCrop={(id) => setCropDivisionId(id)} />
             <Stage
               ref={stageRef}
               width={stageSize.width}
@@ -495,7 +524,10 @@ export function MapCanvas() {
                   draftColor={draftColor}
                   cursorPoint={cursorPoint}
                   snapTarget={snapTarget}
-                  onSelectCountry={setSelectedCountry}
+                  onSelectCountry={(id) => {
+                    setSelectedMarker(null, null);
+                    setSelectedCountry(id);
+                  }}
                   onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>
@@ -504,6 +536,19 @@ export function MapCanvas() {
                   onMoveTerritoryVertex={(countryId, ringIndex, vertexIndex, x, y) =>
                     void moveTerritoryVertex(countryId, ringIndex, vertexIndex, x, y)
                   }
+                />
+                <MarkerLayer
+                  cities={cities}
+                  divisions={divisions}
+                  selectedMarkerId={selectedMarkerId}
+                  selectedMarkerKind={selectedMarkerKind}
+                  interactive={isMarkerInteractive}
+                  onSelectMarker={(id, kind) => {
+                    setSelectedCountry(null);
+                    setSelectedMarker(id, kind);
+                  }}
+                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
+                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
                 />
               </Layer>
             </Stage>
@@ -520,6 +565,13 @@ export function MapCanvas() {
         />
       </div>
       </div>
+
+      {cropDivisionId && (
+        <DivisionCropModal
+          divisionId={cropDivisionId}
+          onClose={() => setCropDivisionId(null)}
+        />
+      )}
 
       <PlaybackControls />
     </main>

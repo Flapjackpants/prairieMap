@@ -22,7 +22,7 @@ def create_empty_frame_info() -> FrameInfo:
 
 
 def create_empty_annotations() -> FrameAnnotations:
-    return FrameAnnotations(countries=[])
+    return FrameAnnotations(countries=[], cities=[], divisions=[])
 
 
 def create_empty_asset_state() -> AssetFrameState:
@@ -41,7 +41,11 @@ def normalize_country(country: CountryTerritory) -> CountryTerritory:
 
 def asset_state_to_export(state: AssetFrameState) -> dict[str, Any]:
     return {
-        "drawings": {"countries": [c.model_dump() for c in state.annotations.countries]},
+        "drawings": {
+            "countries": [c.model_dump() for c in state.annotations.countries],
+            "cities": [m.model_dump() for m in state.annotations.cities],
+            "divisions": [m.model_dump() for m in state.annotations.divisions],
+        },
         "infoBoard": {
             "date": state.info.dateTitle,
             "text": state.info.description,
@@ -53,7 +57,17 @@ def asset_state_to_export(state: AssetFrameState) -> dict[str, Any]:
 def normalize_drawings(drawings: dict[str, Any]) -> FrameAnnotations:
     if drawings and isinstance(drawings.get("countries"), list):
         countries = [CountryTerritory.model_validate(c) for c in drawings["countries"]]
-        return FrameAnnotations(countries=[normalize_country(c) for c in countries])
+        cities_raw = drawings.get("cities") or []
+        divisions_raw = drawings.get("divisions") or []
+        from app.models.project import CityMarker, DivisionMarker
+
+        return FrameAnnotations(
+            countries=[normalize_country(c) for c in countries],
+            cities=[CityMarker.model_validate(m) for m in cities_raw] if isinstance(cities_raw, list) else [],
+            divisions=[DivisionMarker.model_validate(m) for m in divisions_raw]
+            if isinstance(divisions_raw, list)
+            else [],
+        )
     return create_empty_annotations()
 
 

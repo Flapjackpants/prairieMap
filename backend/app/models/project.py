@@ -43,6 +43,29 @@ class RegionLabelPlacement(BaseModel):
     rotation: float | None = None
 
 
+class DivisionCropRect(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class CityMarker(BaseModel):
+    id: str
+    x: float
+    y: float
+    name: str
+
+
+class DivisionMarker(BaseModel):
+    id: str
+    x: float
+    y: float
+    size: float
+    sourceFilename: str
+    crop: DivisionCropRect
+
+
 class CountryTerritory(BaseModel):
     id: str
     factionId: str
@@ -55,6 +78,8 @@ class CountryTerritory(BaseModel):
 
 class FrameAnnotations(BaseModel):
     countries: list[CountryTerritory] = Field(default_factory=list)
+    cities: list[CityMarker] = Field(default_factory=list)
+    divisions: list[DivisionMarker] = Field(default_factory=list)
 
 
 class FactionStat(BaseModel):
@@ -191,6 +216,13 @@ class MoveVertexRequest(BaseModel):
     vertexIndex: int
     x: float
     y: float
+
+
+class UpsertMarkersRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    cities: list[CityMarker]
+    divisions: list[DivisionMarker]
 
 
 class ProjectMutationResponse(BaseModel):

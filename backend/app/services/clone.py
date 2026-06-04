@@ -4,7 +4,9 @@ import uuid
 
 from app.models.project import (
     AssetFrameState,
+    CityMarker,
     CountryTerritory,
+    DivisionMarker,
     FactionStat,
     FrameAnnotations,
     FrameInfo,
@@ -40,7 +42,23 @@ def clone_faction_stat(stat: FactionStat) -> FactionStat:
 
 
 def clone_annotations(source: FrameAnnotations) -> FrameAnnotations:
-    return FrameAnnotations(countries=[clone_country(c) for c in source.countries])
+    return FrameAnnotations(
+        countries=[clone_country(c) for c in source.countries],
+        cities=[
+            CityMarker(id=str(uuid.uuid4()), x=c.x, y=c.y, name=c.name) for c in source.cities
+        ],
+        divisions=[
+            DivisionMarker(
+                id=str(uuid.uuid4()),
+                x=d.x,
+                y=d.y,
+                size=d.size,
+                sourceFilename=d.sourceFilename,
+                crop=d.crop.model_copy(),
+            )
+            for d in source.divisions
+        ],
+    )
 
 
 def clone_frame_info(source: FrameInfo) -> FrameInfo:

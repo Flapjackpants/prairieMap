@@ -11,7 +11,7 @@ import type {
   TimelineEntry,
 } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
-import { createEmptyAssetState } from '../types/project';
+import { createEmptyAnnotations, createEmptyAssetState } from '../types/project';
 import { recomputeCountryLabels } from './territoryGeometry';
 
 function normalizeCountry(country: CountryTerritory): CountryTerritory {
@@ -29,7 +29,11 @@ function normalizeCountry(country: CountryTerritory): CountryTerritory {
 
 function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][string][number] {
   return {
-    drawings: { countries: state.annotations.countries },
+    drawings: {
+      countries: state.annotations.countries,
+      cities: state.annotations.cities,
+      divisions: state.annotations.divisions,
+    },
     infoBoard: {
       date: state.info.dateTitle,
       text: state.info.description,
@@ -39,12 +43,15 @@ function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][s
 }
 
 function normalizeDrawings(drawings: TerritoryDrawings | LegacyDrawingsExport): FrameAnnotations {
-  if (drawings && 'countries' in drawings && Array.isArray(drawings.countries)) {
+  if (drawings && Array.isArray(drawings.countries)) {
+    const territoryDrawings = drawings as TerritoryDrawings;
     return {
-      countries: (drawings.countries as CountryTerritory[]).map(normalizeCountry),
+      countries: territoryDrawings.countries.map(normalizeCountry),
+      cities: territoryDrawings.cities ?? [],
+      divisions: territoryDrawings.divisions ?? [],
     };
   }
-  return { countries: [] };
+  return createEmptyAnnotations();
 }
 
 function exportToAssetState(entry: ProjectExportV2['assets'][string][number]): AssetFrameState {
@@ -97,6 +104,8 @@ export function migrateV1ToAssets(data: ProjectExportV1): {
         countries: (frame.annotations?.countries ?? []).map((c) =>
           normalizeCountry({ ...c, regionLabels: c.regionLabels ?? [] }),
         ),
+        cities: frame.annotations?.cities ?? [],
+        divisions: frame.annotations?.divisions ?? [],
       },
       info: frame.info,
     };

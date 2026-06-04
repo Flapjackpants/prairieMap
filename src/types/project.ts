@@ -1,4 +1,32 @@
-export type ToolMode = 'pan' | 'areaSelect' | 'select';
+export type ToolMode = 'pan' | 'areaSelect' | 'select' | 'city' | 'division';
+
+export type MarkerKind = 'city' | 'division';
+
+export interface CityMarker {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+}
+
+export interface DivisionCropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DivisionMarker {
+  id: string;
+  x: number;
+  y: number;
+  size: number;
+  sourceFilename: string;
+  crop: DivisionCropRect;
+}
+
+export const DEFAULT_CITY_MARKER_SIZE = 8;
+export const DEFAULT_DIVISION_MARKER_SIZE = 48;
 
 export interface PaletteColor {
   id: string;
@@ -48,6 +76,8 @@ export interface CountryTerritory {
 
 export interface TerritoryDrawings {
   countries: CountryTerritory[];
+  cities?: CityMarker[];
+  divisions?: DivisionMarker[];
 }
 
 export interface FactionStat {
@@ -65,6 +95,8 @@ export interface FrameInfo {
 
 export interface FrameAnnotations {
   countries: CountryTerritory[];
+  cities: CityMarker[];
+  divisions: DivisionMarker[];
 }
 
 /** Per-copy editable state stored in assets[filename][copyIndex] */
@@ -145,6 +177,8 @@ export interface ProjectState {
   carryOverLabels: boolean;
   viewport: ViewportState;
   selectedCountryId: string | null;
+  selectedMarkerId: string | null;
+  selectedMarkerKind: MarkerKind | null;
 }
 
 export interface ProjectExportV2 {
@@ -204,12 +238,20 @@ export function createEmptyFrameInfo(): FrameInfo {
 }
 
 export function createEmptyAnnotations(): FrameAnnotations {
-  return { countries: [] };
+  return { countries: [], cities: [], divisions: [] };
 }
 
 export function createEmptyAssetState(): AssetFrameState {
   return {
     annotations: createEmptyAnnotations(),
     info: createEmptyFrameInfo(),
+  };
+}
+
+export function normalizeAnnotations(annotations: FrameAnnotations): FrameAnnotations {
+  return {
+    countries: annotations.countries ?? [],
+    cities: annotations.cities ?? [],
+    divisions: annotations.divisions ?? [],
   };
 }
