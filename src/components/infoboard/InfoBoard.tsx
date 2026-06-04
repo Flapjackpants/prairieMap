@@ -68,29 +68,19 @@ export function InfoBoard() {
 
             <MarkersPanel />
 
-            <section className="flex min-h-0 flex-1 flex-col">
-              <label className="mb-1 block font-mono text-[9px] tracking-widest text-accent-cyan uppercase">
+            <section className="flex max-h-[min(240px,32vh)] min-h-0 shrink-0 flex-col overflow-hidden">
+              <label className="mb-1 block shrink-0 font-mono text-[9px] tracking-widest text-accent-cyan uppercase">
                 :: Event_Log [MD] ::
               </label>
               <textarea
-                className="terminal-screen min-h-[180px] flex-1 resize-none px-2.5 py-2 focus:outline-none"
+                className="terminal-screen min-h-[120px] flex-1 resize-y overflow-y-auto px-2.5 py-2 focus:outline-none"
                 placeholder="## OFFENSIVE BEGINS&#10;&#10;FORCES ADVANCED ACROSS THE NORTHERN FRONT..."
                 value={info?.description ?? ''}
                 onChange={(e) => updateFrameInfo({ description: e.target.value })}
               />
-              {info?.description && (
-                <div className="terminal-readout mt-2 rounded-none border border-metal-shadow p-2">
-                  <p className="mb-1 font-mono text-[9px] tracking-widest text-accent-orange uppercase">
-                    &gt; Readout_Preview
-                  </p>
-                  <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed text-accent-cyan/90 normal-case">
-                    {info.description}
-                  </pre>
-                </div>
-              )}
             </section>
 
-            <section>
+            <section className="shrink-0">
               <div className="mb-2 flex items-center justify-between">
                 <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
                   :: Faction_Stats ::
@@ -174,7 +164,9 @@ export function InfoBoard() {
               </ul>
             </section>
 
-            <FactionManager />
+            <div className="shrink-0">
+              <FactionManager />
+            </div>
           </>
         )}
       </div>

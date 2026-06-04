@@ -6,6 +6,7 @@ import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { normalizeClosedRing } from '../../utils/territoryGeometry';
 import { SNAP_THRESHOLD_PX } from '../../types/project';
+import { isEditableTarget } from '../../utils/editableTarget';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
@@ -154,8 +155,10 @@ export function MapCanvas() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
-        e.preventDefault();
-        setSpaceHeld(true);
+        if (!isEditableTarget(e.target)) {
+          e.preventDefault();
+          setSpaceHeld(true);
+        }
         return;
       }
       if (tool !== 'areaSelect' || !currentFrame) return;
@@ -582,6 +585,7 @@ export function MapCanvas() {
                   countries={countries}
                   selectedCountryId={selectedCountryId}
                   activeFactionId={activeColorId}
+                  viewportScale={viewport.scale}
                   showFills={false}
                   showLabels={false}
                   showAnchorHandles={showAnchorHandles}

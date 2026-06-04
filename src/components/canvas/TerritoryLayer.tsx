@@ -1,5 +1,11 @@
 import { Circle, Group, Line } from 'react-konva';
 import type { CountryTerritory } from '../../types/project';
+import {
+  ANCHOR_HIT_SCREEN_PX,
+  hitStrokeWidthForScreenPx,
+  mapRadiusForScreenPx,
+  mapStrokeWidthForScreenPx,
+} from '../../utils/mapZoom';
 import type { SnapVertex } from '../../utils/vertexSnap';
 import { CountryTerritoryShape } from './CountryTerritoryShape';
 import { CurvedRegionLabels } from './CurvedRegionLabels';
@@ -8,6 +14,7 @@ interface TerritoryLayerProps {
   countries: CountryTerritory[];
   selectedCountryId: string | null;
   activeFactionId: string | null;
+  viewportScale?: number;
   showFills?: boolean;
   showLabels?: boolean;
   showAnchorHandles: boolean;
@@ -32,6 +39,7 @@ export function TerritoryLayer({
   countries,
   selectedCountryId,
   activeFactionId,
+  viewportScale = 1,
   showFills = true,
   showLabels = true,
   showAnchorHandles,
@@ -45,6 +53,12 @@ export function TerritoryLayer({
   onRemoveTerritoryVertex,
   onMoveTerritoryVertex,
 }: TerritoryLayerProps) {
+  const scale = viewportScale;
+  const anchorRadius = (screenPx: number) => mapRadiusForScreenPx(screenPx, scale);
+  const anchorStroke = mapStrokeWidthForScreenPx(2, scale);
+  const anchorHit = (mapRadius: number) =>
+    hitStrokeWidthForScreenPx(ANCHOR_HIT_SCREEN_PX, mapRadius, scale);
+
   const previewPoints =
     cursorPoint && draftPoints.length > 0
       ? [...draftPoints, cursorPoint]
@@ -76,15 +90,17 @@ export function TerritoryLayer({
           country.regions.map((ring, ringIndex) =>
             ring.map(([x, y], vertexIndex) => {
               const ownedByActive = country.factionId === activeFactionId;
+              const radius = anchorRadius(ownedByActive ? 7 : 6);
               return (
                 <Circle
                   key={`anchor-${country.id}-${ringIndex}-${vertexIndex}`}
                   x={x}
                   y={y}
-                  radius={ownedByActive ? 7 : 6}
+                  radius={radius}
                   fill={country.color}
                   stroke={ownedByActive ? '#ffffff' : '#121214'}
-                  strokeWidth={2}
+                  strokeWidth={anchorStroke}
+                  hitStrokeWidth={anchorHit(radius)}
                   opacity={ownedByActive ? 1 : 0.85}
                   draggable
                   onDragEnd={(e) => {
@@ -115,9 +131,9 @@ export function TerritoryLayer({
         <Circle
           x={snapTarget.x}
           y={snapTarget.y}
-          radius={8}
+          radius={anchorRadius(8)}
           stroke="#00e5ff"
-          strokeWidth={2}
+          strokeWidth={anchorStroke}
           fill="rgba(0,229,255,0.25)"
           listening={false}
         />
@@ -133,25 +149,29 @@ export function TerritoryLayer({
             closed={false}
             listening={false}
           />
-          {draftPoints.map((p, i) => (
+          {draftPoints.map((p, i) => {
+            const radius = anchorRadius(i === 0 ? 7 : 5);
+            return (
             <Circle
               key={`draft-${i}`}
               x={p.x}
               y={p.y}
-              radius={i === 0 ? 7 : 5}
+              radius={radius}
               fill={i === 0 ? draftColor : '#121214'}
               stroke={
                 snapTarget?.source === 'draft' && snapTarget.index === i
                   ? '#00e5ff'
                   : draftColor
               }
-              strokeWidth={2}
+              strokeWidth={anchorStroke}
+              hitStrokeWidth={anchorHit(radius)}
               onClick={(e) => {
                 e.cancelBubble = true;
                 if (e.evt.altKey) onRemoveDraftAnchor(i);
               }}
             />
-          ))}
+            );
+          })}
         </>
       )}
     </>

@@ -38,18 +38,13 @@ import {
 } from '../utils/reconcileFolder';
 import { resolveCurrentFrame } from '../utils/projectHelpers';
 import { stateToExport } from '../utils/exportSchema';
+import { isEditableTarget } from '../utils/editableTarget';
 
 const PROJECT_ID_KEY = 'prairiemap-project-id';
 const MAX_UNDO_HISTORY = 50;
 
 function cloneProjectBody(body: ReturnType<typeof toProjectBody>): ReturnType<typeof toProjectBody> {
   return structuredClone(body);
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
 }
 
 type UiAction =
