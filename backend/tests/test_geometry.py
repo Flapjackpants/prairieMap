@@ -98,7 +98,7 @@ def test_curved_label_has_spine():
     label = compute_curved_label_for_region("FRANCE", ring)
     assert label["spine"] is not None
     assert "x1" in label["spine"]
-    assert label["letterSpacing"] == label["fontSize"] * 0.52
+    assert label["letterSpacing"] == label["fontSize"] * 0.68
 
 
 def test_exterior_rings_only_skips_hole():

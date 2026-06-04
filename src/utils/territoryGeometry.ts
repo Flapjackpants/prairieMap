@@ -94,8 +94,11 @@ function clamp(n: number, min: number, max: number): number {
 export function computeRegionLabels(
   name: string,
   regions: PolygonRing[],
+  foreignRings: PolygonRing[] = [],
 ): RegionLabelPlacement[] {
-  return exteriorRingsOnly(regions).map((ring) => computeCurvedLabelForRegion(name, ring));
+  return exteriorRingsOnly(regions).map((ring) =>
+    computeCurvedLabelForRegion(name, ring, foreignRings),
+  );
 }
 
 export function recomputeCountryLabels(country: CountryTerritory): CountryTerritory {

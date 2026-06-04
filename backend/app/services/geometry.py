@@ -14,8 +14,9 @@ MIN_REGION_AREA = 80
 ANCHOR_EPS = 2.0
 LABEL_MIN_FONT = 9
 LABEL_MAX_FONT = 48
-LETTER_SPACING_FACTOR = 0.52
-SPINE_LENGTH_FACTOR = 0.65
+LETTER_SPACING_FACTOR = 0.68
+SPINE_LENGTH_FACTOR = 0.48
+SPINE_MINOR_INSET = 0.38
 ARC_SAMPLES = 48
 PolygonRing = list[list[float]]
 
@@ -265,12 +266,12 @@ def _compute_principal_axis(ring: PolygonRing) -> tuple[float, float, float, flo
     return dx, dy, span, minor
 
 
-def _build_spine(ring: PolygonRing) -> LabelSpine:
+def _build_spine(ring: PolygonRing, length_factor: float = SPINE_LENGTH_FACTOR) -> LabelSpine:
     center = polygon_centroid(ring)
     dx, dy, span, minor = _compute_principal_axis(ring)
-    half_len = (span * SPINE_LENGTH_FACTOR) / 2
+    half_len = min((span * length_factor) / 2, (minor * SPINE_MINOR_INSET) / 2)
     perp_x, perp_y = -dy, dx
-    bulge = minor * 0.1
+    bulge = minor * 0.05
     return LabelSpine(
         x1=center["x"] - dx * half_len,
         y1=center["y"] - dy * half_len,
@@ -332,13 +333,37 @@ def _tangent_degrees_at(spine: LabelSpine, t: float) -> float:
     return math.degrees(math.atan2(ty, tx))
 
 
+def _reverse_spine(spine: LabelSpine) -> LabelSpine:
+    return LabelSpine(
+        x1=spine.x2,
+        y1=spine.y2,
+        cx=spine.cx,
+        cy=spine.cy,
+        x2=spine.x1,
+        y2=spine.y1,
+    )
+
+
+def _is_spine_upside_down(spine: LabelSpine) -> bool:
+    deg = _tangent_degrees_at(spine, 0.5)
+    while deg > 180:
+        deg -= 360
+    while deg < -180:
+        deg += 360
+    return deg > 90 or deg < -90
+
+
+def _orient_spine_for_reading(spine: LabelSpine) -> LabelSpine:
+    return _reverse_spine(spine) if _is_spine_upside_down(spine) else spine
+
+
 def compute_curved_label_for_region(name: str, ring: PolygonRing) -> dict[str, Any]:
     bounds = combined_bounds([ring])
     area = polygon_area(ring)
     span = max(bounds["width"], bounds["height"], 1)
-    font_size = _clamp((area**0.5) * 0.09 + span * 0.022, LABEL_MIN_FONT, LABEL_MAX_FONT)
+    font_size = _clamp((area**0.5) * 0.08 + span * 0.018, LABEL_MIN_FONT, LABEL_MAX_FONT)
     letter_spacing = font_size * LETTER_SPACING_FACTOR
-    spine = _build_spine(ring)
+    spine = _orient_spine_for_reading(_build_spine(ring))
     table = _build_arc_table(spine)
     mid_x, mid_y, _ = _point_at_arc_length(spine, table[1] / 2, table)
     return {

@@ -3,9 +3,10 @@ import { combinedBounds, polygonArea, polygonCentroid } from './territoryGeometr
 
 export const LABEL_MIN_FONT = 9;
 export const LABEL_MAX_FONT = 48;
-export const LETTER_SPACING_FACTOR = 0.52;
+export const LETTER_SPACING_FACTOR = 0.68;
 export const CHAR_WIDTH_FACTOR = 0.58;
-export const SPINE_LENGTH_FACTOR = 0.65;
+export const SPINE_LENGTH_FACTOR = 0.48;
+export const SPINE_MINOR_INSET = 0.38;
 export const ARC_SAMPLES = 48;
 
 export interface GlyphPlacement {
@@ -114,13 +115,40 @@ export function computePrincipalAxis(ring: PolygonRing): {
   };
 }
 
-export function buildSpine(ring: PolygonRing): LabelSpine {
+export function reverseSpine(spine: LabelSpine): LabelSpine {
+  return {
+    x1: spine.x2,
+    y1: spine.y2,
+    cx: spine.cx,
+    cy: spine.cy,
+    x2: spine.x1,
+    y2: spine.y1,
+  };
+}
+
+/** True when tangent at midpoint reads upward on screen (Y-down canvas). */
+export function isSpineUpsideDown(spine: LabelSpine): boolean {
+  const deg = tangentDegreesAt(spine, 0.5);
+  let d = deg;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return d > 90 || d < -90;
+}
+
+export function orientSpineForReading(spine: LabelSpine): LabelSpine {
+  return isSpineUpsideDown(spine) ? reverseSpine(spine) : spine;
+}
+
+export function buildSpine(
+  ring: PolygonRing,
+  lengthFactor: number = SPINE_LENGTH_FACTOR,
+): LabelSpine {
   const center = polygonCentroid(ring);
   const { dx, dy, span, minorSpan } = computePrincipalAxis(ring);
-  const halfLen = (span * SPINE_LENGTH_FACTOR) / 2;
+  const halfLen = Math.min((span * lengthFactor) / 2, (minorSpan * SPINE_MINOR_INSET) / 2);
   const perpX = -dy;
   const perpY = dx;
-  const bulge = minorSpan * 0.1;
+  const bulge = minorSpan * 0.05;
 
   return {
     x1: center.x - dx * halfLen,
@@ -129,6 +157,75 @@ export function buildSpine(ring: PolygonRing): LabelSpine {
     cy: center.y + perpY * bulge,
     x2: center.x + dx * halfLen,
     y2: center.y + dy * halfLen,
+  };
+}
+
+function spineKey(spine: LabelSpine): string {
+  return `${spine.x1},${spine.y1},${spine.x2},${spine.y2}`;
+}
+
+export function spineCandidates(
+  ring: PolygonRing,
+  lengthFactor: number = SPINE_LENGTH_FACTOR,
+): LabelSpine[] {
+  const base = buildSpine(ring, lengthFactor);
+  const a = orientSpineForReading(base);
+  const b = orientSpineForReading(reverseSpine(base));
+  return spineKey(a) === spineKey(b) ? [a] : [a, b];
+}
+
+export function scoreLabelLayout(
+  glyphs: GlyphPlacement[],
+  ownRing: PolygonRing,
+  foreignRings: PolygonRing[],
+): number {
+  let score = 0;
+  for (const g of glyphs) {
+    const pt = { x: g.x, y: g.y };
+    if (pointInRing(pt, ownRing)) score += 10;
+    else score -= 18;
+    for (const foreign of foreignRings) {
+      if (pointInRing(pt, foreign)) score -= 30;
+    }
+  }
+  return score;
+}
+
+export function layoutGlyphsForRegion(
+  name: string,
+  ring: PolygonRing,
+  fontSize: number,
+  foreignRings: PolygonRing[] = [],
+): { glyphs: GlyphPlacement[]; spine: LabelSpine; fontSize: number; letterSpacing: number } {
+  let bestGlyphs: GlyphPlacement[] = [];
+  let bestSpine = orientSpineForReading(buildSpine(ring));
+  let bestScore = -Infinity;
+  let bestFontSize = fontSize;
+  let bestLetterSpacing = fontSize * LETTER_SPACING_FACTOR;
+
+  for (const lengthFactor of [SPINE_LENGTH_FACTOR, 0.4, 0.32]) {
+    for (let fs = fontSize; fs >= fontSize * 0.62; fs -= fontSize * 0.1) {
+      const letterSpacing = fs * LETTER_SPACING_FACTOR;
+      for (const spine of spineCandidates(ring, lengthFactor)) {
+        const glyphs = layoutGlyphs(name, spine, fs, letterSpacing);
+        if (glyphs.length === 0) continue;
+        const score = scoreLabelLayout(glyphs, ring, foreignRings);
+        if (score > bestScore) {
+          bestScore = score;
+          bestGlyphs = glyphs;
+          bestSpine = spine;
+          bestFontSize = fs;
+          bestLetterSpacing = letterSpacing;
+        }
+      }
+    }
+  }
+
+  return {
+    glyphs: bestGlyphs,
+    spine: bestSpine,
+    fontSize: bestFontSize,
+    letterSpacing: bestLetterSpacing,
   };
 }
 
@@ -190,51 +287,75 @@ export function tangentDegreesAt(spine: LabelSpine, t: number): number {
   return (Math.atan2(tan.y, tan.x) * 180) / Math.PI;
 }
 
+/** Fixed arc-length between consecutive letter centers (HoI4-style). */
+export function equalLetterStep(fontSize: number): number {
+  return fontSize * LETTER_SPACING_FACTOR;
+}
+
 export function layoutGlyphs(
   name: string,
   spine: LabelSpine,
   fontSize: number,
-  letterSpacing: number,
-  measureChar: (char: string) => number = () => defaultCharWidth(fontSize),
+  letterSpacing: number = equalLetterStep(fontSize),
 ): GlyphPlacement[] {
   const chars = [...name.toUpperCase()];
   if (chars.length === 0) return [];
 
-  const widths = chars.map((c) => measureChar(c));
-  const totalWidth =
-    widths.reduce((s, w) => s + w, 0) + Math.max(0, chars.length - 1) * letterSpacing;
+  const oriented = orientSpineForReading(spine);
+  const table = buildArcTable(oriented);
 
-  const table = buildArcTable(spine);
-  const start = (table.total - totalWidth) / 2;
+  if (chars.length === 1) {
+    const { t } = pointAtArcLength(oriented, table.total / 2, table);
+    const { x, y } = quadPoint(oriented, t);
+    return [
+      {
+        char: chars[0]!,
+        x,
+        y,
+        rotation: tangentDegreesAt(oriented, t),
+      },
+    ];
+  }
+
+  let step = letterSpacing;
+  let totalSpan = (chars.length - 1) * step;
+  const maxSpan = table.total * 0.92;
+  if (totalSpan > maxSpan) {
+    step = maxSpan / (chars.length - 1);
+    totalSpan = maxSpan;
+  }
+  const start = (table.total - totalSpan) / 2;
 
   const glyphs: GlyphPlacement[] = [];
-  let cursor = start;
   for (let i = 0; i < chars.length; i++) {
-    const w = widths[i]!;
-    const centerArc = cursor + w / 2;
-    const { t } = pointAtArcLength(spine, centerArc, table);
-    const { x, y } = quadPoint(spine, t);
+    const centerArc = start + i * step;
+    const { t } = pointAtArcLength(oriented, centerArc, table);
+    const { x, y } = quadPoint(oriented, t);
     glyphs.push({
       char: chars[i]!,
       x,
       y,
-      rotation: tangentDegreesAt(spine, t),
+      rotation: tangentDegreesAt(oriented, t),
     });
-    cursor += w + (i < chars.length - 1 ? letterSpacing : 0);
   }
   return glyphs;
 }
 
 export function computeCurvedLabelForRegion(
-  _name: string,
+  name: string,
   ring: PolygonRing,
+  foreignRings: PolygonRing[] = [],
 ): RegionLabelPlacement {
   const bounds = combinedBounds([ring]);
   const area = polygonArea(ring);
   const span = Math.max(bounds.width, bounds.height, 1);
-  const fontSize = clamp(Math.sqrt(area) * 0.09 + span * 0.022, LABEL_MIN_FONT, LABEL_MAX_FONT);
-  const letterSpacing = fontSize * LETTER_SPACING_FACTOR;
-  const spine = buildSpine(ring);
+  const baseFontSize = clamp(Math.sqrt(area) * 0.08 + span * 0.018, LABEL_MIN_FONT, LABEL_MAX_FONT);
+  const { spine, fontSize, letterSpacing } = layoutGlyphsForRegion(
+    name,
+    ring,
+    baseFontSize,
+    foreignRings,
+  );
   const mid = pointAtArcLength(spine, buildArcTable(spine).total / 2);
 
   return {

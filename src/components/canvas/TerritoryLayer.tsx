@@ -58,7 +58,9 @@ export function TerritoryLayer({
               isSelected={isSelected}
               onSelect={() => onSelectCountry(country.id)}
             />
-            {country.regions.length > 0 && <CurvedRegionLabels country={country} />}
+            {country.regions.length > 0 && (
+              <CurvedRegionLabels country={country} allCountries={countries} />
+            )}
           </Group>
         );
       })}
