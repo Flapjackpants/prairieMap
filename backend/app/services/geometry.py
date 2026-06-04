@@ -14,7 +14,7 @@ MIN_REGION_AREA = 80
 ANCHOR_EPS = 2.0
 LABEL_MIN_FONT = 9
 LABEL_MAX_FONT = 48
-LETTER_SPACING_FACTOR = 0.68
+LETTER_SPACING_FACTOR = 0.80
 SPINE_LENGTH_FACTOR = 0.48
 SPINE_MINOR_INSET = 0.38
 ARC_SAMPLES = 48
@@ -104,51 +104,6 @@ def remove_vertex_from_country(
         if not new_regions:
             continue
         updated.append(recompute_country_labels(country.model_copy(update={"regions": new_regions})))
-    return updated
-
-
-def convert_territory_ring_variant(
-    countries: list[CountryTerritory],
-    country_id: str,
-    ring_index: int,
-    from_variant: str,
-    to_variant: str,
-) -> list[CountryTerritory]:
-    if from_variant == to_variant:
-        return countries
-    updated: list[CountryTerritory] = []
-    for country in countries:
-        if country.id != country_id:
-            updated.append(country)
-            continue
-        regions = [[list(pt) for pt in ring] for ring in country.regions]
-        extension_regions = [[list(pt) for pt in ring] for ring in country.extensionRegions]
-        if from_variant == "primary":
-            if ring_index < 0 or ring_index >= len(regions):
-                updated.append(country)
-                continue
-            ring = regions.pop(ring_index)
-            extension_regions = union_all_regions([*extension_regions, ring])
-            if not regions and not extension_regions:
-                continue
-            patched = country.model_copy(
-                update={"regions": regions, "extensionRegions": extension_regions}
-            )
-            updated.append(recompute_country_labels(patched))
-        elif from_variant == "extension":
-            if ring_index < 0 or ring_index >= len(extension_regions):
-                updated.append(country)
-                continue
-            ring = extension_regions.pop(ring_index)
-            regions = union_all_regions([*regions, ring])
-            if not regions:
-                continue
-            patched = country.model_copy(
-                update={"regions": regions, "extensionRegions": extension_regions}
-            )
-            updated.append(recompute_country_labels(patched))
-        else:
-            updated.append(country)
     return updated
 
 
@@ -242,46 +197,22 @@ def _clamp(n: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, n))
 
 
-def lighten_hex(hex_color: str, mix: float = 0.38) -> str:
-    h = hex_color.replace("#", "").strip()
-    if len(h) != 6:
-        return hex_color
-    r = int(h[0:2], 16)
-    g = int(h[2:4], 16)
-    b = int(h[4:6], 16)
-
-    def blend(c: int) -> int:
-        return round(c + (255 - c) * mix)
-
-    return f"#{blend(r):02x}{blend(g):02x}{blend(b):02x}"
-
-
 def _merge_target_country(
     country: CountryTerritory,
     new_ring: PolygonRing,
     faction_name: str,
     color: str,
-    preserve_labels: bool,
-    extension_mode: bool,
 ) -> CountryTerritory:
     merged_regions = union_all_regions([*country.regions, new_ring])
-    extension_regions = list(country.extensionRegions)
-    ext_color = country.extensionColor or lighten_hex(color)
-    if extension_mode:
-        extension_regions = union_all_regions([*extension_regions, new_ring])
-        ext_color = country.extensionColor or lighten_hex(color)
-
-    update: dict[str, Any] = {
-        "name": faction_name.upper(),
-        "color": color,
-        "regions": merged_regions,
-        "extensionRegions": extension_regions,
-        "extensionColor": ext_color,
-    }
-    patched = country.model_copy(update=update)
-    if preserve_labels:
-        return patched
-    return recompute_country_labels(patched)
+    return recompute_country_labels(
+        country.model_copy(
+            update={
+                "name": faction_name.upper(),
+                "color": color,
+                "regions": merged_regions,
+            }
+        )
+    )
 
 
 def _point_in_ring(point: dict[str, float], ring: PolygonRing) -> bool:
@@ -570,8 +501,6 @@ def apply_territory_transfer(
     faction_name: str,
     color: str,
     target_country_id: str | None = None,
-    preserve_labels: bool = False,
-    extension_mode: bool = False,
 ) -> list[CountryTerritory]:
     updated: list[CountryTerritory] = []
 
@@ -618,8 +547,6 @@ def apply_territory_transfer(
             new_ring,
             faction_name,
             color,
-            preserve_labels,
-            extension_mode,
         )
 
     return updated

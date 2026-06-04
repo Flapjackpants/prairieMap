@@ -22,7 +22,7 @@ describe('curvedLabel', () => {
   it('produces spine on curved label placement', () => {
     const label = computeCurvedLabelForRegion('FRANCE', ring);
     expect(label.spine).toBeDefined();
-    expect(label.letterSpacing).toBeCloseTo(label.fontSize * 0.68, 5);
+    expect(label.letterSpacing).toBeCloseTo(label.fontSize * 0.80, 5);
   });
 
   it('excludes hole rings from exterior list', () => {
@@ -39,7 +39,7 @@ describe('curvedLabel', () => {
   it('centers glyph string on spine midpoint', () => {
     const spine = buildSpine(ring);
     const table = buildArcTable(spine);
-    const glyphs = layoutGlyphs('ABC', spine, 20, 20 * 0.68);
+    const glyphs = layoutGlyphs('ABC', spine, 20, 20 * 0.80);
     expect(glyphs).toHaveLength(3);
     const midSpine = pointAtArcLength(spine, table.total / 2, table);
     const midGlyph = glyphs[1]!;
@@ -49,7 +49,7 @@ describe('curvedLabel', () => {
   it('uses equal arc-length between consecutive letter centers', () => {
     const spine = orientSpineForReading(buildSpine(ring));
     const fontSize = 20;
-    const step = fontSize * 0.68;
+    const step = fontSize * 0.80;
     const glyphs = layoutGlyphs('ABCDE', spine, fontSize, step);
     const table = buildArcTable(spine);
     const totalSpan = (glyphs.length - 1) * step;

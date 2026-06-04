@@ -15,8 +15,6 @@ from app.services.export_schema import create_empty_annotations, create_empty_as
 from app.services.geometry import (
     apply_territory_transfer,
     claim_anchor_at_point,
-    convert_territory_ring_variant,
-    lighten_hex,
     move_vertex_on_country,
     recompute_country_labels,
     remove_vertex_from_country,
@@ -166,8 +164,6 @@ def add_territory_region(
     color: str,
     region: PolygonRing,
     target_country_id: str | None = None,
-    preserve_labels: bool = False,
-    extension_mode: bool = False,
 ) -> ProjectBody:
     assets = update_asset_at(
         project.assets,
@@ -182,8 +178,6 @@ def add_territory_region(
                         faction_name,
                         color,
                         target_country_id,
-                        preserve_labels,
-                        extension_mode,
                     )
                 }
             }
@@ -234,34 +228,6 @@ def remove_territory_vertex(
                         country_id,
                         ring_index,
                         vertex_index,
-                    )
-                }
-            }
-        ),
-    )
-    return project.model_copy(update={"assets": assets})
-
-
-def convert_territory_variant(
-    project: ProjectBody,
-    target: AssetTarget,
-    country_id: str,
-    ring_index: int,
-    from_variant: str,
-    to_variant: str,
-) -> ProjectBody:
-    assets = update_asset_at(
-        project.assets,
-        target,
-        lambda s: s.model_copy(
-            update={
-                "annotations": {
-                    "countries": convert_territory_ring_variant(
-                        s.annotations.countries,
-                        country_id,
-                        ring_index,
-                        from_variant,
-                        to_variant,
                     )
                 }
             }
@@ -472,10 +438,9 @@ def update_faction_metadata(
             countries = []
             for c in copy.annotations.countries:
                 if c.factionId == faction_id:
-                    patch: dict[str, str] = {"name": next_name.upper(), "color": next_hex}
-                    if hex_color is not None:
-                        patch["extensionColor"] = lighten_hex(next_hex)
-                    updated = recompute_country_labels(c.model_copy(update=patch))
+                    updated = recompute_country_labels(
+                        c.model_copy(update={"name": next_name.upper(), "color": next_hex})
+                    )
                     if updated.regions:
                         countries.append(updated)
                 else:

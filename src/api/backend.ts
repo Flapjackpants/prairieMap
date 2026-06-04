@@ -49,8 +49,6 @@ export async function addTerritoryRegion(params: {
   color: string;
   region: PolygonRing;
   targetCountryId?: string | null;
-  preserveLabels?: boolean;
-  extensionMode?: boolean;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/add-region', {
     method: 'POST',
@@ -103,20 +101,6 @@ export async function removeTerritoryVertex(params: {
   vertexIndex: number;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/remove-vertex', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
-}
-
-export async function convertTerritoryVariant(params: {
-  project: ProjectBody;
-  target: { filename: string; copyIndex: number };
-  countryId: string;
-  ringIndex: number;
-  fromVariant: 'primary' | 'extension';
-  toVariant: 'primary' | 'extension';
-}): Promise<ProjectMutationResponse> {
-  return apiFetch('/geometry/convert-territory-variant', {
     method: 'POST',
     body: JSON.stringify(params),
   });

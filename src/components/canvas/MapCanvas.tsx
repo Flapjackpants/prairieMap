@@ -45,12 +45,11 @@ export function MapCanvas() {
     claimAnchor,
     removeTerritoryVertex,
     moveTerritoryVertex,
-    setSelectedTerritory,
+    setSelectedCountry,
     setFileCanvasSize,
   } = useProject();
 
-  const { tool, viewport, selectedCountryId, activeColorId, territoryDrawMode, drawColors } =
-    state;
+  const { tool, viewport, selectedCountryId, activeColorId } = state;
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
@@ -68,11 +67,8 @@ export function MapCanvas() {
   );
   const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
-  const draftColor = drawColors
-    ? territoryDrawMode === 'extend'
-      ? drawColors.extension
-      : drawColors.primary
-    : activeColor?.hex ?? '#00e5ff';
+  const selectedCountry = countries.find((c) => c.id === selectedCountryId);
+  const draftColor = selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
 
   /** Konva left-drag pan (PAN tool or Space). Middle-click uses manual viewport updates. */
   const isKonvaPanDrag = tool === 'pan' || spaceHeld;
@@ -493,17 +489,13 @@ export function MapCanvas() {
                 <TerritoryLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
-                  selectedTerritory={state.selectedTerritory}
                   activeFactionId={activeColorId}
                   showAnchorHandles={showAnchorHandles}
-                  ringSelectable={isSelect}
                   draftPoints={draftPoints}
                   draftColor={draftColor}
                   cursorPoint={cursorPoint}
                   snapTarget={snapTarget}
-                  onSelectRing={(countryId, ringIndex, variant) => {
-                    setSelectedTerritory({ countryId, ringIndex, variant });
-                  }}
+                  onSelectCountry={setSelectedCountry}
                   onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>

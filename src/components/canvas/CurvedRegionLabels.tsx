@@ -45,7 +45,6 @@ export function CurvedRegionLabels({ country, allCountries }: CurvedRegionLabels
     [country.id, allCountries],
   );
 
-  // Labels only on primary (dark) regions — extension (light) land has no labels.
   const exteriors = useMemo(() => exteriorRingsOnly(country.regions), [country.regions]);
   const placements = useMemo(
     () => resolvePlacements(country, foreignRings),

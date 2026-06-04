@@ -5,7 +5,6 @@ from fastapi import APIRouter
 from app.models.project import (
     AddRegionRequest,
     ClaimAnchorRequest,
-    ConvertTerritoryVariantRequest,
     DeleteCountryRequest,
     MoveVertexRequest,
     ProjectMutationResponse,
@@ -28,8 +27,6 @@ def add_region(req: AddRegionRequest) -> ProjectMutationResponse:
         req.color,
         req.region,
         req.targetCountryId,
-        req.preserveLabels,
-        req.extensionMode,
     )
     return ProjectMutationResponse(project=project)
 
@@ -69,19 +66,6 @@ def remove_vertex(req: RemoveVertexRequest) -> ProjectMutationResponse:
         req.countryId,
         req.ringIndex,
         req.vertexIndex,
-    )
-    return ProjectMutationResponse(project=project)
-
-
-@router.post("/convert-territory-variant", response_model=ProjectMutationResponse)
-def convert_territory_variant(req: ConvertTerritoryVariantRequest) -> ProjectMutationResponse:
-    project = project_service.convert_territory_variant(
-        req.project,
-        req.target,
-        req.countryId,
-        req.ringIndex,
-        req.fromVariant,
-        req.toVariant,
     )
     return ProjectMutationResponse(project=project)
 

@@ -1,5 +1,5 @@
 import { Circle, Group, Line } from 'react-konva';
-import type { CountryTerritory, SelectedTerritory } from '../../types/project';
+import type { CountryTerritory } from '../../types/project';
 import type { SnapVertex } from '../../utils/vertexSnap';
 import { CountryTerritoryShape } from './CountryTerritoryShape';
 import { CurvedRegionLabels } from './CurvedRegionLabels';
@@ -7,15 +7,13 @@ import { CurvedRegionLabels } from './CurvedRegionLabels';
 interface TerritoryLayerProps {
   countries: CountryTerritory[];
   selectedCountryId: string | null;
-  selectedTerritory: SelectedTerritory | null;
   activeFactionId: string | null;
   showAnchorHandles: boolean;
-  ringSelectable: boolean;
   draftPoints: { x: number; y: number }[];
   draftColor: string;
   cursorPoint: { x: number; y: number } | null;
   snapTarget: SnapVertex | null;
-  onSelectRing: (countryId: string, ringIndex: number, variant: import('../../types/project').TerritoryVariant) => void;
+  onSelectCountry: (id: string) => void;
   onRemoveDraftAnchor: (index: number) => void;
   onClaimAnchor: (x: number, y: number) => void;
   onRemoveTerritoryVertex: (countryId: string, ringIndex: number, vertexIndex: number) => void;
@@ -31,15 +29,13 @@ interface TerritoryLayerProps {
 export function TerritoryLayer({
   countries,
   selectedCountryId,
-  selectedTerritory,
   activeFactionId,
   showAnchorHandles,
-  ringSelectable,
   draftPoints,
   draftColor,
   cursorPoint,
   snapTarget,
-  onSelectRing,
+  onSelectCountry,
   onRemoveDraftAnchor,
   onClaimAnchor,
   onRemoveTerritoryVertex,
@@ -60,9 +56,7 @@ export function TerritoryLayer({
             <CountryTerritoryShape
               country={country}
               isSelected={isSelected}
-              selectedTerritory={selectedTerritory}
-              ringSelectable={ringSelectable}
-              onSelectRing={(ringIndex, variant) => onSelectRing(country.id, ringIndex, variant)}
+              onSelect={() => onSelectCountry(country.id)}
             />
             {country.regions.length > 0 && (
               <CurvedRegionLabels country={country} allCountries={countries} />

@@ -118,15 +118,13 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
             <TerritoryLayer
               countries={snapshot.countries}
               selectedCountryId={null}
-              selectedTerritory={null}
               activeFactionId={null}
               showAnchorHandles={false}
-              ringSelectable={false}
               draftPoints={[]}
               draftColor="#00e5ff"
               cursorPoint={null}
               snapTarget={null}
-              onSelectRing={() => {}}
+              onSelectCountry={() => {}}
               onRemoveDraftAnchor={() => {}}
               onClaimAnchor={() => {}}
               onRemoveTerritoryVertex={() => {}}

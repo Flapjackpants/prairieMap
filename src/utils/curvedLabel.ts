@@ -3,7 +3,7 @@ import { combinedBounds, polygonArea, polygonCentroid } from './territoryGeometr
 
 export const LABEL_MIN_FONT = 9;
 export const LABEL_MAX_FONT = 48;
-export const LETTER_SPACING_FACTOR = 0.68;
+export const LETTER_SPACING_FACTOR = 0.80;
 export const CHAR_WIDTH_FACTOR = 0.58;
 export const SPINE_LENGTH_FACTOR = 0.48;
 export const SPINE_MINOR_INSET = 0.38;
@@ -204,7 +204,7 @@ export function layoutGlyphsForRegion(
   let bestLetterSpacing = fontSize * LETTER_SPACING_FACTOR;
 
   for (const lengthFactor of [SPINE_LENGTH_FACTOR, 0.4, 0.32]) {
-    for (let fs = fontSize; fs >= fontSize * 0.62; fs -= fontSize * 0.1) {
+    for (let fs = fontSize; fs >= fontSize * 0.80; fs -= fontSize * 0.1) {
       const letterSpacing = fs * LETTER_SPACING_FACTOR;
       for (const spine of spineCandidates(ring, lengthFactor)) {
         const glyphs = layoutGlyphs(name, spine, fs, letterSpacing);

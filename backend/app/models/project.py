@@ -48,11 +48,9 @@ class CountryTerritory(BaseModel):
     factionId: str
     name: str
     color: str
-    extensionColor: str | None = None
     labelSettings: CountryLabelSettings = Field(default_factory=CountryLabelSettings)
     regionLabels: list[RegionLabelPlacement] = Field(default_factory=list)
     regions: list[list[list[float]]] = Field(default_factory=list)
-    extensionRegions: list[list[list[float]]] = Field(default_factory=list)
 
 
 class FrameAnnotations(BaseModel):
@@ -117,8 +115,6 @@ class AddRegionRequest(BaseModel):
     color: str
     region: list[list[float]]
     targetCountryId: str | None = None
-    preserveLabels: bool = False
-    extensionMode: bool = False
 
 
 class DeleteCountryRequest(BaseModel):
@@ -195,15 +191,6 @@ class MoveVertexRequest(BaseModel):
     vertexIndex: int
     x: float
     y: float
-
-
-class ConvertTerritoryVariantRequest(BaseModel):
-    project: ProjectBody
-    target: AssetTarget
-    countryId: str
-    ringIndex: int
-    fromVariant: str
-    toVariant: str
 
 
 class ProjectMutationResponse(BaseModel):

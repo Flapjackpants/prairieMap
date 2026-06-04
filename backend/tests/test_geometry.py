@@ -1,7 +1,6 @@
 from app.services.geometry import (
     apply_territory_transfer,
     claim_anchor_at_point,
-    convert_territory_ring_variant,
     compute_curved_label_for_region,
     compute_region_labels,
     exterior_rings_only,
@@ -99,7 +98,7 @@ def test_curved_label_has_spine():
     label = compute_curved_label_for_region("FRANCE", ring)
     assert label["spine"] is not None
     assert "x1" in label["spine"]
-    assert label["letterSpacing"] == label["fontSize"] * 0.68
+    assert label["letterSpacing"] == label["fontSize"] * 0.80
 
 
 def test_exterior_rings_only_skips_hole():
@@ -109,109 +108,6 @@ def test_exterior_rings_only_skips_hole():
     assert len(exteriors) == 1
     labels = compute_region_labels("B", [outer, hole])
     assert len(labels) == 1
-
-
-def test_extend_mode_preserves_labels_and_adds_extension_regions():
-    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
-    label = {
-        "x": 50,
-        "y": 50,
-        "fontSize": 20,
-        "letterSpacing": 10,
-        "spine": {
-            "x1": 10,
-            "y1": 50,
-            "cx": 50,
-            "cy": 45,
-            "x2": 90,
-            "y2": 50,
-        },
-        "rotation": 0,
-    }
-    nation = CountryTerritory(
-        id="a",
-        factionId="faction-a",
-        name="NATION",
-        color="#3366cc",
-        labelSettings=CountryLabelSettings(),
-        regionLabels=[label],
-        regions=[ring],
-        extensionRegions=[],
-    )
-    add_ring = [[50, 0], [80, 0], [80, 50], [50, 50]]
-    result = apply_territory_transfer(
-        [nation],
-        add_ring,
-        "faction-a",
-        "NATION",
-        "#3366cc",
-        target_country_id="a",
-        preserve_labels=True,
-        extension_mode=True,
-    )
-    out = result[0]
-    assert out.regionLabels[0].model_dump() == label
-    assert len(out.extensionRegions) >= 1
-    assert out.extensionColor is not None
-
-
-def test_convert_ring_primary_to_extension_preserves_labels():
-    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
-    label = {"x": 50, "y": 50, "fontSize": 18, "letterSpacing": 8}
-    nation = CountryTerritory(
-        id="a",
-        factionId="f",
-        name="A",
-        color="#3366cc",
-        labelSettings=CountryLabelSettings(),
-        regionLabels=[label],
-        regions=[ring],
-        extensionRegions=[],
-    )
-    result = convert_territory_ring_variant([nation], "a", 0, "primary", "extension")
-    out = result[0]
-    assert len(out.regions) == 0
-    assert len(out.extensionRegions) == 1
-    assert len(out.regionLabels) == 0
-
-
-def test_convert_extension_to_primary_unions_touching_primary():
-    shared = [[0, 0], [100, 0], [100, 100], [0, 100]]
-    primary = [[100, 0], [200, 0], [200, 100], [100, 100]]
-    extension = [[50, 50], [150, 50], [150, 150], [50, 150]]
-    nation = CountryTerritory(
-        id="a",
-        factionId="f",
-        name="A",
-        color="#3366cc",
-        labelSettings=CountryLabelSettings(),
-        regionLabels=[{"x": 50, "y": 50, "fontSize": 18, "letterSpacing": 8}],
-        regions=[shared, primary],
-        extensionRegions=[extension],
-    )
-    result = convert_territory_ring_variant([nation], "a", 0, "extension", "primary")
-    out = result[0]
-    assert len(out.extensionRegions) == 0
-    assert len(out.regions) <= 2
-
-
-def test_convert_ring_extension_to_primary_recomputes_labels():
-    ring = [[0, 0], [100, 0], [100, 100], [0, 100]]
-    nation = CountryTerritory(
-        id="a",
-        factionId="f",
-        name="A",
-        color="#3366cc",
-        labelSettings=CountryLabelSettings(),
-        regionLabels=[{"x": 1, "y": 1, "fontSize": 10, "letterSpacing": 4}],
-        regions=[],
-        extensionRegions=[ring],
-    )
-    result = convert_territory_ring_variant([nation], "a", 0, "extension", "primary")
-    out = result[0]
-    assert len(out.regions) == 1
-    assert len(out.extensionRegions) == 0
-    assert len(out.regionLabels) >= 1
 
 
 def test_claim_anchor_removes_only_from_selected_country():
