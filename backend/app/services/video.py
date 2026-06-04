@@ -104,30 +104,42 @@ def compile_frames_to_mp4(
     )
 
     if use_variable:
-        cmd: list[str] = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y"]
+        # Concat *filter* with -loop 1 -t emits one frame per still image, ignoring
+        # display duration. The concat demuxer honors per-file duration lines.
+        concat_list = work_dir / "concat.txt"
+        lines: list[str] = []
         for p, dur in zip(ordered, frame_durations):
-            cmd.extend(["-loop", "1", "-t", str(dur), "-i", str(p)])
-        n = len(ordered)
-        parts = [f"[{i}:v]{scale_pad}[v{i}]" for i in range(n)]
-        concat_in = "".join(f"[v{i}]" for i in range(n))
-        parts.append(f"{concat_in}concat=n={n}:v=1[out]")
-        cmd.extend(
-            [
-                "-filter_complex",
-                ";".join(parts),
-                "-map",
-                "[out]",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "fast",
-                "-pix_fmt",
-                "yuv420p",
-                "-movflags",
-                "+faststart",
-                str(output_path),
-            ]
-        )
+            lines.append(f"file '{p.name}'")
+            lines.append(f"duration {dur}")
+        lines.append(f"file '{ordered[-1].name}'")
+        concat_list.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+        cmd = [
+            ffmpeg,
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "concat",
+            "-safe",
+            "0",
+            "-i",
+            str(concat_list),
+            "-vf",
+            scale_pad,
+            "-vsync",
+            "vfr",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
     else:
         framerate = 1.0 / seconds_per_frame
         vf = f"{scale_pad},fps={framerate}"

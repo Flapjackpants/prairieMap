@@ -39,6 +39,7 @@ export function PlaybackControls() {
           frameCount={timeline.length}
           isExporting={video.isExporting}
           progress={video.progress}
+          captureLabel={video.captureLabel}
           error={video.error}
           onConfirm={(seconds, divisionMotionFps) => {
             void video

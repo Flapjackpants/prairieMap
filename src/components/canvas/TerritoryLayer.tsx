@@ -8,6 +8,8 @@ interface TerritoryLayerProps {
   countries: CountryTerritory[];
   selectedCountryId: string | null;
   activeFactionId: string | null;
+  showFills?: boolean;
+  showLabels?: boolean;
   showAnchorHandles: boolean;
   draftPoints: { x: number; y: number }[];
   draftColor: string;
@@ -30,6 +32,8 @@ export function TerritoryLayer({
   countries,
   selectedCountryId,
   activeFactionId,
+  showFills = true,
+  showLabels = true,
   showAnchorHandles,
   draftPoints,
   draftColor,
@@ -53,12 +57,14 @@ export function TerritoryLayer({
 
         return (
           <Group key={country.id}>
-            <CountryTerritoryShape
-              country={country}
-              isSelected={isSelected}
-              onSelect={() => onSelectCountry(country.id)}
-            />
-            {country.regions.length > 0 && (
+            {showFills && (
+              <CountryTerritoryShape
+                country={country}
+                isSelected={isSelected}
+                onSelect={() => onSelectCountry(country.id)}
+              />
+            )}
+            {showLabels && country.regions.length > 0 && (
               <CurvedRegionLabels country={country} allCountries={countries} />
             )}
           </Group>

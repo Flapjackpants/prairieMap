@@ -59,6 +59,7 @@ class CityMarker(BaseModel):
 
 class DivisionMarker(BaseModel):
     id: str
+    name: str = ""
     x: float
     y: float
     size: float

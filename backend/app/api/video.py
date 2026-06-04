@@ -34,13 +34,39 @@ async def compile_video(
 
         output = tmp_dir / "output.mp4"
         durations: list[float] | None = None
-        if frame_durations:
+        if frame_durations is not None and frame_durations.strip():
             try:
                 parsed = json.loads(frame_durations)
-                if isinstance(parsed, list) and len(parsed) == len(frame_paths):
-                    durations = [float(d) for d in parsed]
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+            except json.JSONDecodeError as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid frame_durations JSON: {e!s}",
+                ) from e
+            if not isinstance(parsed, list):
+                raise HTTPException(
+                    status_code=400,
+                    detail="frame_durations must be a JSON array",
+                )
+            if len(parsed) != len(frame_paths):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"frame_durations length ({len(parsed)}) must match "
+                        f"frame count ({len(frame_paths)})"
+                    ),
+                )
+            try:
+                durations = [float(d) for d in parsed]
+            except (TypeError, ValueError) as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"frame_durations must be numbers: {e!s}",
+                ) from e
+            if not all(d > 0 for d in durations):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Each frame_durations entry must be positive",
+                )
         compile_frames_to_mp4(frame_paths, seconds_per_frame, output, durations)
         data = output.read_bytes()
         return Response(

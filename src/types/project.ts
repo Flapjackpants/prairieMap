@@ -18,6 +18,8 @@ export interface DivisionCropRect {
 
 export interface DivisionMarker {
   id: string;
+  /** Internal identity for export motion matching; not drawn on map. */
+  name: string;
   x: number;
   y: number;
   size: number;
@@ -252,6 +254,9 @@ export function normalizeAnnotations(annotations: FrameAnnotations): FrameAnnota
   return {
     countries: annotations.countries ?? [],
     cities: annotations.cities ?? [],
-    divisions: annotations.divisions ?? [],
+    divisions: (annotations.divisions ?? []).map((d) => ({
+      ...d,
+      name: d.name ?? '',
+    })),
   };
 }

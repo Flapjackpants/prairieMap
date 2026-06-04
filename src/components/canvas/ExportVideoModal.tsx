@@ -9,6 +9,7 @@ interface ExportVideoModalProps {
   frameCount: number;
   isExporting: boolean;
   progress: number;
+  captureLabel?: string | null;
   error: string | null;
   onConfirm: (secondsPerFrame: number, divisionMotionFps: number) => void;
   onCancel: () => void;
@@ -19,6 +20,7 @@ export function ExportVideoModal({
   frameCount,
   isExporting,
   progress,
+  captureLabel,
   error,
   onConfirm,
   onCancel,
@@ -92,7 +94,8 @@ export function ExportVideoModal({
             />
             <p className="mt-1 font-mono text-[8px] leading-relaxed text-text-muted">
               Subframes per second between timeline frames when a division moves; static gaps use
-              one hold frame.
+              one hold frame. Glide requires the same division name on both frames (set in crop
+              editor)—copy/paste or reuse the name when placing on the next frame.
             </p>
           </label>
 
@@ -104,7 +107,9 @@ export function ExportVideoModal({
                   style={{ width: `${progress}%` }}
                 />
               </div>
-              <p className="font-mono text-[9px] text-accent-cyan">{progress}%</p>
+              <p className="font-mono text-[9px] text-accent-cyan">
+                {captureLabel ?? `${progress}%`}
+              </p>
             </div>
           )}
 

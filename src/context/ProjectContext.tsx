@@ -679,6 +679,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         ...frame.frameData.annotations.divisions,
         {
           id,
+          name: 'Division',
           x,
           y,
           size: DEFAULT_DIVISION_MARKER_SIZE,

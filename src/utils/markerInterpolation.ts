@@ -6,6 +6,61 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/** Trim + lowercase for cross-frame division matching. */
+export function normalizeDivisionName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export interface DivisionMotionPair {
+  from: DivisionMarker;
+  to: DivisionMarker;
+}
+
+/** Pair by non-empty matching name first, then by id. */
+export function pairDivisionsForMotion(
+  from: DivisionMarker[],
+  to: DivisionMarker[],
+): DivisionMotionPair[] {
+  const pairs: DivisionMotionPair[] = [];
+  const usedFrom = new Set<string>();
+  const usedTo = new Set<string>();
+
+  for (const b of to) {
+    const key = normalizeDivisionName(b.name);
+    if (!key) continue;
+    const a = from.find(
+      (f) => !usedFrom.has(f.id) && normalizeDivisionName(f.name) === key,
+    );
+    if (a) {
+      pairs.push({ from: a, to: b });
+      usedFrom.add(a.id);
+      usedTo.add(b.id);
+    }
+  }
+
+  for (const b of to) {
+    if (usedTo.has(b.id)) continue;
+    const a = from.find((f) => !usedFrom.has(f.id) && f.id === b.id);
+    if (a) {
+      pairs.push({ from: a, to: b });
+      usedFrom.add(a.id);
+      usedTo.add(b.id);
+    }
+  }
+
+  for (const a of from) {
+    if (usedFrom.has(a.id)) continue;
+    const b = to.find((f) => !usedTo.has(f.id) && f.id === a.id);
+    if (b) {
+      pairs.push({ from: a, to: b });
+      usedFrom.add(a.id);
+      usedTo.add(b.id);
+    }
+  }
+
+  return pairs;
+}
+
 /** Smooth ease for division motion (0..1 in, 0..1 out). */
 export function easeInOutCubic(t: number): number {
   if (t <= 0) return 0;
@@ -13,15 +68,12 @@ export function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 }
 
-/** True when a division id exists in both frames with different position or size. */
+/** True when any paired division moves between frames. */
 export function hasMovingDivisions(
   from: DivisionMarker[],
   to: DivisionMarker[],
 ): boolean {
-  const fromById = new Map(from.map((d) => [d.id, d]));
-  for (const b of to) {
-    const a = fromById.get(b.id);
-    if (!a) continue;
+  for (const { from: a, to: b } of pairDivisionsForMotion(from, to)) {
     if (
       Math.abs(a.x - b.x) > MOTION_EPSILON ||
       Math.abs(a.y - b.y) > MOTION_EPSILON ||
@@ -44,39 +96,42 @@ export function segmentSubstepCount(
   return Math.max(2, Math.round(secondsPerFrame * divisionMotionFps));
 }
 
-/** Match by id; lerp position/size. Appear/disappear at endpoints (no fade). */
+/** Interpolate paired divisions; unpaired use appear/disappear at endpoints. */
 export function interpolateDivisions(
   from: DivisionMarker[],
   to: DivisionMarker[],
   t: number,
 ): DivisionMarker[] {
-  const fromById = new Map(from.map((d) => [d.id, d]));
-  const toById = new Map(to.map((d) => [d.id, d]));
-  const ids = new Set([...fromById.keys(), ...toById.keys()]);
+  const pairs = pairDivisionsForMotion(from, to);
+  const pairedFromIds = new Set(pairs.map((p) => p.from.id));
+  const pairedToIds = new Set(pairs.map((p) => p.to.id));
   const result: DivisionMarker[] = [];
 
-  for (const id of ids) {
-    const a = fromById.get(id);
-    const b = toById.get(id);
-    if (a && b) {
-      result.push({
-        ...b,
-        x: lerp(a.x, b.x, t),
-        y: lerp(a.y, b.y, t),
-        size: lerp(a.size, b.size, t),
-        crop: { ...b.crop },
-        sourceFilename: b.sourceFilename,
-      });
-    } else if (a && t <= 0) {
-      result.push({ ...a, crop: { ...a.crop } });
-    } else if (b && t >= 1) {
-      result.push({ ...b, crop: { ...b.crop } });
-    } else if (a && !b && t < 1) {
-      result.push({ ...a, crop: { ...a.crop } });
-    } else if (b && !a && t > 0) {
-      result.push({ ...b, crop: { ...b.crop } });
-    }
+  for (const { from: a, to: b } of pairs) {
+    result.push({
+      ...b,
+      id: b.id,
+      name: b.name || a.name,
+      x: lerp(a.x, b.x, t),
+      y: lerp(a.y, b.y, t),
+      size: lerp(a.size, b.size, t),
+      crop: { ...b.crop },
+      sourceFilename: b.sourceFilename,
+    });
   }
+
+  for (const a of from) {
+    if (pairedFromIds.has(a.id)) continue;
+    if (t <= 0) result.push({ ...a, crop: { ...a.crop } });
+    else if (t < 1) result.push({ ...a, crop: { ...a.crop } });
+  }
+
+  for (const b of to) {
+    if (pairedToIds.has(b.id)) continue;
+    if (t >= 1) result.push({ ...b, crop: { ...b.crop } });
+    else if (t > 0) result.push({ ...b, crop: { ...b.crop } });
+  }
+
   return result;
 }
 

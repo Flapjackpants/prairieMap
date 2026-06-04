@@ -19,9 +19,19 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     division?.crop ?? { x: 0, y: 0, width: 64, height: 64 },
   );
   const [size, setSize] = useState(division?.size ?? DEFAULT_DIVISION_MARKER_SIZE);
+  const [name, setName] = useState(division?.name?.trim() || 'Division');
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; startCrop: DivisionCropRect } | null>(null);
+
+  useEffect(() => {
+    if (division) {
+      setName(division.name?.trim() || 'Division');
+      setSourceFilename(division.sourceFilename);
+      setCrop(division.crop);
+      setSize(division.size);
+    }
+  }, [divisionId, division]);
 
   useEffect(() => {
     if (!sourceFilename) {
@@ -121,7 +131,14 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
 
   const handleSave = () => {
     if (!division) return;
-    void updateDivisionMarker(divisionId, { sourceFilename, crop, size }).then(onClose);
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    void updateDivisionMarker(divisionId, {
+      name: trimmed,
+      sourceFilename,
+      crop,
+      size,
+    }).then(onClose);
   };
 
   if (!division) return null;
@@ -133,6 +150,16 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
           <span className="panel-title">Division icon crop</span>
         </div>
         <div className="panel-inset flex flex-col gap-3 p-3">
+          <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
+            Division name
+            <input
+              type="text"
+              className="mt-1 w-full border border-border bg-surface px-2 py-1 font-mono text-xs text-text-primary"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Same name on each frame for video glide"
+            />
+          </label>
           <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
             Source image
             <select

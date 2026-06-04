@@ -27,6 +27,7 @@ def _frame_with_markers() -> AssetFrameState:
             divisions=[
                 DivisionMarker(
                     id="div1",
+                    name="",
                     x=100,
                     y=200,
                     size=28,
@@ -116,6 +117,7 @@ def test_upsert_markers_then_timeline_switch():
     divisions = [
         DivisionMarker(
             id="d",
+            name="",
             x=3,
             y=4,
             size=28,

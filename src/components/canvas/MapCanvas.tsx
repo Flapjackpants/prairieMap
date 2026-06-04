@@ -10,6 +10,8 @@ import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../util
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import { TerritoryLayer } from './TerritoryLayer';
+import { TerritoryFillsLayer } from './TerritoryFillsLayer';
+import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 import { CityNameModal } from './CityNameModal';
 import { DivisionCropModal } from './DivisionCropModal';
@@ -526,10 +528,62 @@ export function MapCanvas() {
                   </>
                 )}
 
+                <TerritoryFillsLayer
+                  countries={countries}
+                  selectedCountryId={selectedCountryId}
+                  onSelectCountry={(id) => {
+                    setSelectedMarker(null, null);
+                    setSelectedCountry(id);
+                  }}
+                />
+                {isPlacementTool && (
+                  <Rect
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    fill="transparent"
+                    listening
+                    onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
+                      if (e.evt.button !== 0) return;
+                      e.cancelBubble = true;
+                      handlePlacementClick();
+                    }}
+                  />
+                )}
+                <MarkerLayer
+                  showCities={false}
+                  showDivisions
+                  divisions={divisions}
+                  selectedMarkerId={selectedMarkerId}
+                  selectedMarkerKind={selectedMarkerKind}
+                  interactive={isMarkerInteractive}
+                  onSelectMarker={(id, kind) => {
+                    setSelectedCountry(null);
+                    setSelectedMarker(id, kind);
+                  }}
+                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
+                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
+                />
+                <TerritoryLabelsLayer countries={countries} />
+                <MarkerLayer
+                  showDivisions={false}
+                  showCities
+                  cities={cities}
+                  selectedMarkerId={selectedMarkerId}
+                  selectedMarkerKind={selectedMarkerKind}
+                  interactive={isMarkerInteractive}
+                  onSelectMarker={(id, kind) => {
+                    setSelectedCountry(null);
+                    setSelectedMarker(id, kind);
+                  }}
+                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
+                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
+                />
                 <TerritoryLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
                   activeFactionId={activeColorId}
+                  showFills={false}
+                  showLabels={false}
                   showAnchorHandles={showAnchorHandles}
                   draftPoints={draftPoints}
                   draftColor={draftColor}
@@ -547,32 +601,6 @@ export function MapCanvas() {
                   onMoveTerritoryVertex={(countryId, ringIndex, vertexIndex, x, y) =>
                     void moveTerritoryVertex(countryId, ringIndex, vertexIndex, x, y)
                   }
-                />
-                {isPlacementTool && (
-                  <Rect
-                    width={canvasWidth}
-                    height={canvasHeight}
-                    fill="transparent"
-                    listening
-                    onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
-                      if (e.evt.button !== 0) return;
-                      e.cancelBubble = true;
-                      handlePlacementClick();
-                    }}
-                  />
-                )}
-                <MarkerLayer
-                  cities={cities}
-                  divisions={divisions}
-                  selectedMarkerId={selectedMarkerId}
-                  selectedMarkerKind={selectedMarkerKind}
-                  interactive={isMarkerInteractive}
-                  onSelectMarker={(id, kind) => {
-                    setSelectedCountry(null);
-                    setSelectedMarker(id, kind);
-                  }}
-                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
-                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
                 />
               </Layer>
             </Stage>

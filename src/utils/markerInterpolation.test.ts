@@ -9,6 +9,7 @@ import type { DivisionMarker } from '../types/project';
 
 const base: DivisionMarker = {
   id: 'd1',
+  name: '',
   x: 0,
   y: 0,
   size: 40,
@@ -63,5 +64,20 @@ describe('segmentSubstepCount', () => {
     const to = [{ ...base, x: 50, y: 0 }];
     expect(hasMovingDivisions(from, to)).toBe(true);
     expect(segmentSubstepCount(2, 24, from, to)).toBe(48);
+  });
+
+  it('detects motion when same name but different ids', () => {
+    const from = [{ ...base, id: 'a', name: '1st Army', x: 0, y: 0 }];
+    const to = [{ ...base, id: 'b', name: '1st Army', x: 100, y: 0 }];
+    expect(hasMovingDivisions(from, to)).toBe(true);
+    const mid = interpolateDivisions(from, to, 0.5)[0];
+    expect(mid.x).toBe(50);
+    expect(mid.name).toBe('1st Army');
+  });
+
+  it('does not pair divisions with different names', () => {
+    const from = [{ ...base, id: 'a', name: 'Alpha', x: 0 }];
+    const to = [{ ...base, id: 'b', name: 'Beta', x: 100 }];
+    expect(hasMovingDivisions(from, to)).toBe(false);
   });
 });

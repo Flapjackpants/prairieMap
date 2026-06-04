@@ -21,6 +21,7 @@ def test_markers_roundtrip_export():
             divisions=[
                 DivisionMarker(
                     id="div1",
+                    name="1st Army",
                     x=100,
                     y=200,
                     size=48,
@@ -34,6 +35,8 @@ def test_markers_roundtrip_export():
     exported = asset_state_to_export(state)
     assert exported["drawings"]["cities"][0]["name"] == "Paris"
     assert exported["drawings"]["divisions"][0]["size"] == 48
+    assert exported["drawings"]["divisions"][0]["name"] == "1st Army"
     restored = export_to_asset_state(exported)
     assert len(restored.annotations.cities) == 1
     assert len(restored.annotations.divisions) == 1
+    assert restored.annotations.divisions[0].name == "1st Army"

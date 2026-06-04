@@ -50,6 +50,7 @@ def clone_annotations(source: FrameAnnotations) -> FrameAnnotations:
         divisions=[
             DivisionMarker(
                 id=str(uuid.uuid4()),
+                name=d.name,
                 x=d.x,
                 y=d.y,
                 size=d.size,

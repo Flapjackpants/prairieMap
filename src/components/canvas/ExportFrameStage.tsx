@@ -6,7 +6,8 @@ import {
   estimateEventLogLines,
   formatEventLogForExport,
 } from '../../utils/formatEventLogExport';
-import { TerritoryLayer } from './TerritoryLayer';
+import { TerritoryFillsLayer } from './TerritoryFillsLayer';
+import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 
 export interface ExportFrameSnapshot {
@@ -20,6 +21,7 @@ export interface ExportFrameSnapshot {
   divisions: DivisionMarker[];
   dateTitle: string;
   eventLog: string;
+  divisionImages?: Record<string, HTMLImageElement>;
 }
 
 interface ExportFrameStageProps {
@@ -118,24 +120,24 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
                 />
               </>
             )}
-            <TerritoryLayer
-              countries={snapshot.countries}
-              selectedCountryId={null}
-              activeFactionId={null}
-              showAnchorHandles={false}
-              draftPoints={[]}
-              draftColor="#00e5ff"
-              cursorPoint={null}
-              snapTarget={null}
-              onSelectCountry={() => {}}
-              onRemoveDraftAnchor={() => {}}
-              onClaimAnchor={() => {}}
-              onRemoveTerritoryVertex={() => {}}
-              onMoveTerritoryVertex={() => {}}
-            />
+            <TerritoryFillsLayer countries={snapshot.countries} selectedCountryId={null} />
             <MarkerLayer
-              cities={snapshot.cities}
+              showCities={false}
+              showDivisions
               divisions={snapshot.divisions}
+              divisionImageMap={snapshot.divisionImages}
+              selectedMarkerId={null}
+              selectedMarkerKind={null}
+              interactive={false}
+              onSelectMarker={() => {}}
+              onMoveCity={() => {}}
+              onMoveDivision={() => {}}
+            />
+            <TerritoryLabelsLayer countries={snapshot.countries} />
+            <MarkerLayer
+              showDivisions={false}
+              showCities
+              cities={snapshot.cities}
               selectedMarkerId={null}
               selectedMarkerKind={null}
               interactive={false}

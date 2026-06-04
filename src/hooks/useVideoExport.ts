@@ -1,11 +1,14 @@
 import type Konva from 'konva';
 import { useCallback, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { compileVideo } from '../api/backend';
 import { DEFAULT_SECONDS_PER_FRAME } from '../constants/playback';
 import type { ExportFrameSnapshot } from '../components/canvas/ExportFrameStage';
 import { useProject } from '../context/ProjectContext';
+import type { DivisionMarker, ProjectState } from '../types/project';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { isBlankAssetKey } from '../types/project';
+import { preloadDivisionImages, waitForExportPaint } from '../utils/exportCapture';
 import {
   citiesForSegment,
   easeInOutCubic,
@@ -25,26 +28,25 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-function waitFrames(count = 2): Promise<void> {
-  return new Promise((resolve) => {
-    let n = 0;
-    const tick = () => {
-      n += 1;
-      if (n >= count) resolve();
-      else requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
+function collectDivisionsFromIndices(state: ProjectState, indices: number[]): DivisionMarker[] {
+  const all: DivisionMarker[] = [];
+  for (const i of indices) {
+    const r = resolveTimelineEntry(state, i);
+    if (r) all.push(...r.frameData.annotations.divisions);
+  }
+  return all;
 }
 
 export function useVideoExport() {
   const { state } = useProject();
   const [isExporting, setIsExporting] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [captureLabel, setCaptureLabel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ExportFrameSnapshot | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const abortRef = useRef(false);
+  const divisionImagesRef = useRef<Record<string, HTMLImageElement>>({});
 
   const runExport = useCallback(
     async (
@@ -61,6 +63,7 @@ export function useVideoExport() {
       setIsExporting(true);
       setError(null);
       setProgress(0);
+      setCaptureLabel(null);
 
       const savedIndex = state.currentTimelineIndex;
       const blobs: Blob[] = [];
@@ -93,9 +96,18 @@ export function useVideoExport() {
         exportW = Math.max(2, exportW - (exportW % 2));
         exportH = Math.max(2, exportH - (exportH % 2));
 
+        divisionImagesRef.current = await preloadDivisionImages(
+          state.fileRegistry,
+          collectDivisionsFromIndices(state, exportableIndices),
+        );
+
         const captureSnapshot = async (snap: ExportFrameSnapshot) => {
-          setSnapshot(snap);
-          await waitFrames(4);
+          const snapWithImages: ExportFrameSnapshot = {
+            ...snap,
+            divisionImages: divisionImagesRef.current,
+          };
+          flushSync(() => setSnapshot(snapWithImages));
+          await waitForExportPaint(8);
           const stage = stageRef.current;
           if (!stage) throw new Error('Export stage not ready');
           const canvas = stage.toCanvas({ pixelRatio: 1 });
@@ -138,6 +150,7 @@ export function useVideoExport() {
         if (exportableIndices.length === 1) {
           totalCaptures = 1;
         } else {
+          totalCaptures = 1;
           for (let j = 0; j < exportableIndices.length - 1; j++) {
             const from = resolveTimelineEntry(state, exportableIndices[j])!;
             const to = resolveTimelineEntry(state, exportableIndices[j + 1])!;
@@ -153,6 +166,7 @@ export function useVideoExport() {
 
         if (exportableIndices.length === 1) {
           const resolved = resolveTimelineEntry(state, exportableIndices[0])!;
+          setCaptureLabel('Capturing 1/1');
           const snap = await buildSnap(
             resolved,
             resolved.frameData.annotations.cities,
@@ -161,7 +175,20 @@ export function useVideoExport() {
           blobs.push(await captureSnapshot(snap));
           frameDurations.push(secondsPerFrame);
           captureCount = 1;
+          setProgress(90);
         } else {
+          const first = resolveTimelineEntry(state, exportableIndices[0])!;
+          setCaptureLabel('Capturing 1/' + totalCaptures);
+          const firstSnap = await buildSnap(
+            first,
+            first.frameData.annotations.cities,
+            first.frameData.annotations.divisions,
+          );
+          blobs.push(await captureSnapshot(firstSnap));
+          frameDurations.push(secondsPerFrame);
+          captureCount = 1;
+          setProgress(Math.round((captureCount / totalCaptures) * 90));
+
           for (let j = 0; j < exportableIndices.length - 1; j++) {
             if (abortRef.current) break;
             const from = resolveTimelineEntry(state, exportableIndices[j])!;
@@ -175,8 +202,8 @@ export function useVideoExport() {
             const subDuration = secondsPerFrame / substeps;
             for (let k = 0; k < substeps; k++) {
               if (abortRef.current) break;
-              const linear = (k + 1) / substeps;
-              const t = easeInOutCubic(linear);
+              const t =
+                substeps === 1 ? 1 : easeInOutCubic(k / (substeps - 1));
               const citiesSeg = citiesForSegment(
                 from.frameData.annotations.cities,
                 to.frameData.annotations.cities,
@@ -187,10 +214,12 @@ export function useVideoExport() {
                 to.frameData.annotations.divisions,
                 t,
               );
-              const snap = await buildSnap(to, citiesSeg, divsSeg);
+              captureCount += 1;
+              setCaptureLabel(`Capturing ${captureCount}/${totalCaptures}`);
+              const mapFrame = t >= 1 ? to : from;
+              const snap = await buildSnap(mapFrame, citiesSeg, divsSeg);
               blobs.push(await captureSnapshot(snap));
               frameDurations.push(subDuration);
-              captureCount += 1;
               setProgress(Math.round((captureCount / totalCaptures) * 90));
             }
           }
@@ -201,7 +230,12 @@ export function useVideoExport() {
           return;
         }
 
+        if (frameDurations.length !== blobs.length) {
+          throw new Error('Export frame duration count mismatch');
+        }
+
         setProgress(95);
+        setCaptureLabel('Encoding video…');
         const mp4 = await compileVideo(blobs, secondsPerFrame, frameDurations);
         const url = URL.createObjectURL(mp4);
         const a = document.createElement('a');
@@ -214,6 +248,7 @@ export function useVideoExport() {
         setError(e instanceof Error ? e.message : 'Video export failed');
       } finally {
         setSnapshot(null);
+        setCaptureLabel(null);
         setIsExporting(false);
         void savedIndex;
       }
@@ -228,6 +263,7 @@ export function useVideoExport() {
   return {
     isExporting,
     progress,
+    captureLabel,
     error,
     snapshot,
     stageRef,

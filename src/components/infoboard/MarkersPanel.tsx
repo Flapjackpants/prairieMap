@@ -93,8 +93,8 @@ export function MarkersPanel() {
                         setSelectedMarker(d.id, 'division');
                       }}
                     >
-                      <Shield className="mr-0.5 inline h-2.5 w-2.5" />
-                      {d.sourceFilename.split('/').pop()}
+                    <Shield className="mr-0.5 inline h-2.5 w-2.5" />
+                    {d.name.trim() || d.sourceFilename.split('/').pop()}
                     </button>
                     <button
                       type="button"
