@@ -8,6 +8,7 @@ import { normalizeClosedRing } from '../../utils/territoryGeometry';
 import { SNAP_THRESHOLD_PX } from '../../types/project';
 import { isEditableTarget } from '../../utils/editableTarget';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
+import { useMapImageUrl } from '../../hooks/useMapImageUrl';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import { TerritoryLayer } from './TerritoryLayer';
@@ -78,9 +79,18 @@ export function MapCanvas() {
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
 
-  const image = useLoadedImage(
-    currentFrame && !currentFrame.isMissing ? currentFrame.objectUrl : null,
+  const mapFile =
+    currentFrame && !currentFrame.isMissing && !currentFrame.isBlank
+      ? state.fileRegistry[currentFrame.filename]?.file ?? null
+      : null;
+  const mapImageUrl = useMapImageUrl(
+    currentFrame && !currentFrame.isMissing && !currentFrame.isBlank
+      ? currentFrame.filename
+      : null,
+    mapFile,
+    Boolean(currentFrame && !currentFrame.isMissing && !currentFrame.isBlank && mapFile),
   );
+  const image = useLoadedImage(mapImageUrl);
   const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
   const selectedCountry = countries.find((c) => c.id === selectedCountryId);

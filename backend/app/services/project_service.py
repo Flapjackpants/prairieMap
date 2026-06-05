@@ -324,7 +324,7 @@ def set_timeline_index(project: ProjectBody, index: int) -> ProjectBody:
     if idx == project.currentTimelineIndex or not project.timeline:
         return project.model_copy(update={"currentTimelineIndex": idx})
 
-    if not project.carryOverLabels:
+    if not project.carryOverLabels or idx < project.currentTimelineIndex:
         return project.model_copy(update={"currentTimelineIndex": idx})
 
     prev_entry = project.timeline[project.currentTimelineIndex]

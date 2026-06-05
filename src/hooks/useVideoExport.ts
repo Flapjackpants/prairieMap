@@ -9,6 +9,7 @@ import type { DivisionMarker, ProjectState } from '../types/project';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { isBlankAssetKey } from '../types/project';
 import { preloadDivisionImages, waitForExportPaint } from '../utils/exportCapture';
+import { acquire } from '../utils/mapImageCache';
 import {
   citiesForSegment,
   easeInOutCubic,
@@ -125,11 +126,14 @@ export function useVideoExport() {
           divisions: ExportFrameSnapshot['divisions'],
         ): Promise<ExportFrameSnapshot> => {
           let image: HTMLImageElement | null = null;
-          if (resolved.objectUrl && !resolved.isBlank && !isBlankAssetKey(resolved.filename)) {
-            try {
-              image = await loadImage(resolved.objectUrl);
-            } catch {
-              image = null;
+          if (!resolved.isBlank && !isBlankAssetKey(resolved.filename)) {
+            const file = state.fileRegistry[resolved.filename]?.file;
+            if (file) {
+              try {
+                image = await loadImage(acquire(resolved.filename, file));
+              } catch {
+                image = null;
+              }
             }
           }
           return {

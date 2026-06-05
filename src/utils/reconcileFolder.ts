@@ -11,13 +11,14 @@ import {
   createInitialAssetsFromFiles,
   createTimelineFromFiles,
 } from './exportSchema';
+import { releaseAllMapAssets } from './releaseMapAssets';
 
 export function buildFileRegistry(files: File[]): Record<string, FileRegistryEntry> {
   const registry: Record<string, FileRegistryEntry> = {};
   for (const file of files) {
     registry[file.name] = {
       file,
-      objectUrl: URL.createObjectURL(file),
+      objectUrl: null,
       canvasWidth: 1920,
       canvasHeight: 1080,
     };
@@ -26,9 +27,7 @@ export function buildFileRegistry(files: File[]): Record<string, FileRegistryEnt
 }
 
 export function revokeFileRegistry(registry: Record<string, FileRegistryEntry>): void {
-  for (const entry of Object.values(registry)) {
-    if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
-  }
+  releaseAllMapAssets(registry);
 }
 
 /** Fresh project from folder only (no prior state). */

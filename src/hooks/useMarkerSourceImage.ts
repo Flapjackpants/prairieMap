@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useProject } from '../context/ProjectContext';
 import { isBlankAssetKey } from '../types/project';
+import { acquireMapImageUrl } from './useMapImageUrl';
 
 export function useMarkerSourceImage(filename: string | null | undefined) {
   const { state } = useProject();
@@ -11,11 +12,12 @@ export function useMarkerSourceImage(filename: string | null | undefined) {
       setImage(null);
       return;
     }
-    const url = state.fileRegistry[filename]?.objectUrl;
-    if (!url) {
+    const file = state.fileRegistry[filename]?.file;
+    if (!file) {
       setImage(null);
       return;
     }
+    const url = acquireMapImageUrl(filename, file);
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => setImage(img);

@@ -1,6 +1,7 @@
 import type { DivisionMarker } from '../types/project';
 import { isBlankAssetKey } from '../types/project';
 import type { FileRegistryEntry } from '../types/project';
+import { acquire } from './mapImageCache';
 
 export function loadImageFromUrl(url: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -26,8 +27,9 @@ export async function preloadDivisionImages(
   const map: Record<string, HTMLImageElement> = {};
   await Promise.all(
     filenames.map(async (filename) => {
-      const url = fileRegistry[filename]?.objectUrl;
-      if (!url) return;
+      const file = fileRegistry[filename]?.file;
+      if (!file) return;
+      const url = acquire(filename, file);
       try {
         map[filename] = await loadImageFromUrl(url);
       } catch {

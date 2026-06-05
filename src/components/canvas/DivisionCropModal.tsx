@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMapImageUrl } from '../../hooks/useMapImageUrl';
 import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { DEFAULT_DIVISION_MARKER_SIZE, isBlankAssetKey } from '../../types/project';
@@ -33,13 +34,17 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     }
   }, [divisionId, division]);
 
+  const sourceFile = sourceFilename
+    ? state.fileRegistry[sourceFilename]?.file ?? null
+    : null;
+  const sourceUrl = useMapImageUrl(
+    sourceFilename || null,
+    sourceFile,
+    Boolean(sourceFilename && sourceFile && !isBlankAssetKey(sourceFilename)),
+  );
+
   useEffect(() => {
-    if (!sourceFilename) {
-      setImg(null);
-      return;
-    }
-    const url = state.fileRegistry[sourceFilename]?.objectUrl;
-    if (!url) {
+    if (!sourceUrl) {
       setImg(null);
       return;
     }
@@ -47,8 +52,8 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     image.crossOrigin = 'anonymous';
     image.onload = () => setImg(image);
     image.onerror = () => setImg(null);
-    image.src = url;
-  }, [sourceFilename, state.fileRegistry]);
+    image.src = sourceUrl;
+  }, [sourceUrl]);
 
   const drawPreview = useCallback(() => {
     const canvas = canvasRef.current;

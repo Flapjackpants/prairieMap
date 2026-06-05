@@ -1,14 +1,12 @@
-import { AlertTriangle, Copy, Film, ImageIcon, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Copy, Film, ImageIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { FrameDuplicateOptions } from '../../types/project';
+import { isBlankAssetKey } from '../../types/project';
 import { displayFilename, resolveTimelineEntry } from '../../utils/projectHelpers';
 import { DuplicateFrameModal } from './DuplicateFrameModal';
-
-function frameCode(index: number, label: string): string {
-  const slug = label.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9]+/g, '_').slice(0, 12).toUpperCase();
-  return `${String(index + 1).padStart(2, '0')} // FRAME_${slug || 'MAP'}`;
-}
+import { FrameRackRow, RACK_ROW_GAP, RACK_ROW_HEIGHT } from './FrameRackRow';
 
 export function FrameSidebar() {
   const {
@@ -19,10 +17,23 @@ export function FrameSidebar() {
     deleteFrame,
     duplicateFrame,
   } = useProject();
-  const { timeline, currentTimelineIndex } = state;
+  const { timeline, currentTimelineIndex, fileRegistry } = state;
   const [duplicateSourceIndex, setDuplicateSourceIndex] = useState<number | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: timeline.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => RACK_ROW_HEIGHT + RACK_ROW_GAP,
+    overscan: 4,
+  });
+
+  useEffect(() => {
+    if (timeline.length === 0) return;
+    virtualizer.scrollToIndex(currentTimelineIndex, { align: 'auto' });
+  }, [currentTimelineIndex, timeline.length, virtualizer]);
 
   const openDuplicateModal = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -111,7 +122,7 @@ export function FrameSidebar() {
         )}
       </div>
 
-      <div className="panel-inset panel-scroll p-2">
+      <div ref={scrollRef} className="panel-inset panel-scroll min-h-0 flex-1 p-2">
         {timeline.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center">
             <ImageIcon className="h-10 w-10 text-border-bright opacity-50" />
@@ -120,109 +131,49 @@ export function FrameSidebar() {
             </p>
           </div>
         ) : (
-          <ul className="space-y-1.5">
-            {timeline.map((entry, index) => {
+          <div
+            className="relative w-full"
+            style={{ height: `${virtualizer.getTotalSize()}px` }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const index = virtualRow.index;
+              const entry = timeline[index]!;
               const resolved = resolveTimelineEntry(state, index)!;
-              const isActive = index === currentTimelineIndex;
-              const isDragging = dragIndex === index;
-              const isDropTarget = dropTargetIndex === index && dragIndex !== index;
-              const label = displayFilename(entry.filename);
-              const copyLabel =
-                (state.assets[entry.filename]?.length ?? 0) > 1
-                  ? ` · CPY_${entry.copyIndex + 1}`
-                  : '';
+              const registry = isBlankAssetKey(entry.filename)
+                ? null
+                : fileRegistry[entry.filename];
 
               return (
-                <li
+                <div
                   key={entry.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(index, e)}
-                  onDragOver={(e) => handleDragOver(index, e)}
-                  onDrop={(e) => handleDrop(index, e)}
-                  onDragEnd={handleDragEnd}
-                  className={`transition-all ${isDragging ? 'opacity-50' : ''} ${
-                    isDropTarget ? 'outline outline-1 outline-dashed outline-accent-cyan/50' : ''
-                  }`}
+                  className="absolute left-0 top-0 w-full"
+                  style={{
+                    height: `${virtualRow.size}px`,
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
                 >
-                  <div className={`group rack-slot ${isActive ? 'rack-slot-active' : ''}`}>
-                    <div
-                      className="grip-ridges flex w-3 shrink-0 cursor-grab items-stretch border-r border-metal-shadow active:cursor-grabbing"
-                      title="Drag to reorder"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => setTimelineIndex(index)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    >
-                      <span
-                        className={`led ${isActive ? 'led-on' : ''}`}
-                        aria-label={isActive ? 'Active frame' : 'Inactive frame'}
-                      />
-
-                      <div className="rack-thumb">
-                        {resolved.isMissing ? (
-                          <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 bg-accent-crimson/10 px-0.5">
-                            <AlertTriangle className="h-4 w-4 text-accent-orange" />
-                            <span className="text-center font-mono text-[6px] leading-tight text-accent-orange uppercase">
-                              ERR
-                            </span>
-                          </div>
-                        ) : resolved.isBlank ? (
-                          <div className="flex h-full w-full items-center justify-center bg-surface-overlay">
-                            <ImageIcon className="h-5 w-5 text-border-bright opacity-60" />
-                          </div>
-                        ) : (
-                          <img
-                            src={resolved.objectUrl!}
-                            alt={label}
-                            className="h-full w-full object-cover"
-                            draggable={false}
-                          />
-                        )}
-                        <span className="absolute bottom-0 left-0 bg-surface/95 px-1 font-mono text-[9px] tabular-nums text-accent-cyan">
-                          {String(index + 1).padStart(2, '0')}
-                        </span>
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-mono text-[10px] font-semibold tracking-wider text-text-primary uppercase">
-                          {frameCode(index, label)}
-                        </p>
-                        <p className="truncate font-mono text-[9px] tracking-wide text-text-muted uppercase">
-                          {label}
-                          {copyLabel}
-                          {resolved.isBlank && (
-                            <span className="text-accent-orange"> · BLK</span>
-                          )}
-                          {resolved.isMissing && (
-                            <span className="text-accent-orange"> · MIS</span>
-                          )}
-                        </p>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
-                      title="Duplicate frame"
-                      onClick={(e) => openDuplicateModal(index, e)}
-                    >
-                      <Copy className="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-icon h-7 w-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 hover:!text-accent-crimson focus:opacity-100"
-                      title="Delete frame"
-                      onClick={(e) => handleDelete(index, e)}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </li>
+                  <FrameRackRow
+                    index={index}
+                    entry={entry}
+                    isActive={index === currentTimelineIndex}
+                    isDragging={dragIndex === index}
+                    isDropTarget={dropTargetIndex === index && dragIndex !== index}
+                    isBlank={resolved.isBlank}
+                    isMissing={resolved.isMissing}
+                    file={registry?.file ?? null}
+                    copyCount={state.assets[entry.filename]?.length ?? 0}
+                    onSelect={() => setTimelineIndex(index)}
+                    onDuplicate={(e) => openDuplicateModal(index, e)}
+                    onDelete={(e) => handleDelete(index, e)}
+                    onDragStart={(e) => handleDragStart(index, e)}
+                    onDragOver={(e) => handleDragOver(index, e)}
+                    onDrop={(e) => handleDrop(index, e)}
+                    onDragEnd={handleDragEnd}
+                  />
+                </div>
               );
             })}
-          </ul>
+          </div>
         )}
       </div>
 
