@@ -319,16 +319,33 @@ def delete_country(project: ProjectBody, target: AssetTarget, country_id: str) -
     return project.model_copy(update={"assets": assets})
 
 
+def _with_visited_timeline(project: ProjectBody, entry_id: str) -> list[str]:
+    visited = set(project.visitedTimelineIds)
+    visited.add(entry_id)
+    return list(visited)
+
+
 def set_timeline_index(project: ProjectBody, index: int) -> ProjectBody:
     idx = clamp_timeline_index(index, len(project.timeline))
     if idx == project.currentTimelineIndex or not project.timeline:
         return project.model_copy(update={"currentTimelineIndex": idx})
 
-    if not project.carryOverLabels or idx < project.currentTimelineIndex:
-        return project.model_copy(update={"currentTimelineIndex": idx})
+    next_entry = project.timeline[idx]
+    visited = set(project.visitedTimelineIds)
+    already_visited = next_entry.id in visited
+    base_update: dict = {
+        "currentTimelineIndex": idx,
+        "visitedTimelineIds": _with_visited_timeline(project, next_entry.id),
+    }
+
+    if (
+        not project.carryOverLabels
+        or idx < project.currentTimelineIndex
+        or already_visited
+    ):
+        return project.model_copy(update=base_update)
 
     prev_entry = project.timeline[project.currentTimelineIndex]
-    next_entry = project.timeline[idx]
     prev_data = get_asset_state(project.assets, prev_entry.filename, prev_entry.copyIndex)
     next_data = get_asset_state(project.assets, next_entry.filename, next_entry.copyIndex)
     merged = merge_carried_territories(prev_data, next_data)
@@ -337,7 +354,7 @@ def set_timeline_index(project: ProjectBody, index: int) -> ProjectBody:
         AssetTarget(filename=next_entry.filename, copyIndex=next_entry.copyIndex),
         lambda _: merged,
     )
-    return project.model_copy(update={"assets": assets, "currentTimelineIndex": idx})
+    return project.model_copy(update={**base_update, "assets": assets})
 
 
 def reorder_timeline(project: ProjectBody, from_index: int, to_index: int) -> ProjectBody:
@@ -366,6 +383,7 @@ def delete_timeline_entry(project: ProjectBody, index: int) -> ProjectBody:
     if not project.timeline:
         return project
     delete_index = clamp_timeline_index(index, len(project.timeline))
+    removed_id = project.timeline[delete_index].id
     timeline = [t for i, t in enumerate(project.timeline) if i != delete_index]
     current = project.currentTimelineIndex
     if not timeline:
@@ -375,11 +393,13 @@ def delete_timeline_entry(project: ProjectBody, index: int) -> ProjectBody:
     elif delete_index == current:
         current = min(delete_index, len(timeline) - 1)
     assets, timeline = cleanup_asset_copies(project.assets, timeline)
+    visited = [entry_id for entry_id in project.visitedTimelineIds if entry_id != removed_id]
     return project.model_copy(
         update={
             "assets": assets,
             "timeline": timeline,
             "currentTimelineIndex": clamp_timeline_index(current, len(timeline)),
+            "visitedTimelineIds": visited,
         }
     )
 
@@ -431,8 +451,14 @@ def duplicate_frame(
         + [new_entry]
         + project.timeline[insert_index:]
     )
+    visited = _with_visited_timeline(project, new_entry.id)
     return project.model_copy(
-        update={"assets": assets, "timeline": timeline, "currentTimelineIndex": insert_index}
+        update={
+            "assets": assets,
+            "timeline": timeline,
+            "currentTimelineIndex": insert_index,
+            "visitedTimelineIds": visited,
+        }
     )
 
 

@@ -75,6 +75,12 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     ctx.strokeStyle = '#00e5ff';
     ctx.lineWidth = 2;
     ctx.strokeRect(sx, sy, sw, sh);
+    const handle = 8;
+    ctx.fillStyle = '#00e5ff';
+    ctx.fillRect(sx + sw - handle, sy + sh - handle, handle, handle);
+    ctx.strokeStyle = '#0a0a0c';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(sx + sw - handle, sy + sh - handle, handle, handle);
   }, [img, crop]);
 
   useEffect(() => {
@@ -85,34 +91,67 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     const canvas = canvasRef.current;
     if (!canvas || !img) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scale = canvas.width / img.width;
-    const x = ((clientX - rect.left) / rect.width) * canvas.width / scale;
-    const y = ((clientY - rect.top) / rect.height) * canvas.height / scale;
+    const displayScale = canvas.width / img.width;
+    const x = ((clientX - rect.left) / rect.width) * canvas.width / displayScale;
+    const y = ((clientY - rect.top) / rect.height) * canvas.height / displayScale;
     return { x: Math.max(0, x), y: Math.max(0, y) };
   };
 
+  const pointerToCanvas = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: ((clientX - rect.left) / rect.width) * canvas.width,
+      y: ((clientY - rect.top) / rect.height) * canvas.height,
+    };
+  };
+
+  const hitResizeHandle = (clientX: number, clientY: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !img) return false;
+    const { x: canvasX, y: canvasY } = pointerToCanvas(clientX, clientY);
+    const displayScale = canvas.width / img.width;
+    const brX = (crop.x + crop.width) * displayScale;
+    const brY = (crop.y + crop.height) * displayScale;
+    return Math.hypot(canvasX - brX, canvasY - brY) < 14;
+  };
+
+  const updateCanvasCursor = (clientX: number, clientY: number, dragging: 'move' | 'resize' | null) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    if (dragging === 'resize') {
+      canvas.style.cursor = 'nwse-resize';
+    } else if (dragging === 'move') {
+      canvas.style.cursor = 'move';
+    } else {
+      canvas.style.cursor = hitResizeHandle(clientX, clientY) ? 'nwse-resize' : 'crosshair';
+    }
+  };
+
   const onPointerDown = (e: React.PointerEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas || !img) return;
     const pt = canvasToImage(e.clientX, e.clientY);
-    const handle = 12;
-    const scale = canvasRef.current && img ? canvasRef.current.width / img.width : 1;
-    const sx = crop.x * scale;
-    const sy = crop.y * scale;
-    const sw = crop.width * scale;
-    const sh = crop.height * scale;
-    const cx = (e.nativeEvent.offsetX / (canvasRef.current?.width ?? 1)) * (canvasRef.current?.width ?? 1);
-    const cy = (e.nativeEvent.offsetY / (canvasRef.current?.height ?? 1)) * (canvasRef.current?.height ?? 1);
-    const nearBr = Math.hypot(cx - (sx + sw), cy - (sy + sh)) < handle;
+    const nearBr = hitResizeHandle(e.clientX, e.clientY);
+    const mode = nearBr ? 'resize' : 'move';
     dragRef.current = {
-      mode: nearBr ? 'resize' : 'move',
+      mode,
       startX: pt.x,
       startY: pt.y,
       startCrop: { ...crop },
     };
+    updateCanvasCursor(e.clientX, e.clientY, mode);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    e.preventDefault();
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!dragRef.current || !img) return;
+    if (!img) return;
+    if (!dragRef.current) {
+      updateCanvasCursor(e.clientX, e.clientY, null);
+      return;
+    }
     const pt = canvasToImage(e.clientX, e.clientY);
     const dx = pt.x - dragRef.current.startX;
     const dy = pt.y - dragRef.current.startY;
@@ -128,10 +167,12 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
       const h = Math.max(8, Math.min(img.height - start.y, start.height + dy));
       setCrop({ ...start, width: w, height: h });
     }
+    updateCanvasCursor(e.clientX, e.clientY, dragRef.current.mode);
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     dragRef.current = null;
+    updateCanvasCursor(e.clientX, e.clientY, null);
   };
 
   const handleSave = () => {
@@ -186,6 +227,7 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
+              onPointerLeave={onPointerUp}
             />
           </div>
           <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">

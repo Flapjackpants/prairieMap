@@ -177,6 +177,7 @@ export interface ProjectState {
   activeColorId: string;
   tool: ToolMode;
   carryOverLabels: boolean;
+  visitedTimelineIds: string[];
   viewport: ViewportState;
   selectedCountryId: string | null;
   selectedMarkerId: string | null;

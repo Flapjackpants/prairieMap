@@ -13,6 +13,7 @@ export interface ProjectBody {
   palette: PaletteColor[];
   carryOverLabels: boolean;
   currentTimelineIndex: number;
+  visitedTimelineIds: string[];
 }
 
 export function toProjectBody(state: ProjectState): ProjectBody {
@@ -23,6 +24,7 @@ export function toProjectBody(state: ProjectState): ProjectBody {
     palette: state.palette,
     carryOverLabels: state.carryOverLabels,
     currentTimelineIndex: state.currentTimelineIndex,
+    visitedTimelineIds: state.visitedTimelineIds,
   };
 }
 
@@ -38,5 +40,6 @@ export function mergeServerProject(
     palette: body.palette,
     carryOverLabels: body.carryOverLabels,
     currentTimelineIndex: body.currentTimelineIndex,
+    visitedTimelineIds: body.visitedTimelineIds ?? [],
   };
 }

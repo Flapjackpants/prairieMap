@@ -75,6 +75,7 @@ const initialState: ProjectState = {
   activeColorId: DEFAULT_PALETTE[0].id,
   tool: 'pan',
   carryOverLabels: true,
+  visitedTimelineIds: [],
   viewport: { scale: 1, x: 0, y: 0 },
   selectedCountryId: null,
   selectedMarkerId: null,

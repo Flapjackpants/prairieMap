@@ -121,6 +121,7 @@ class ProjectBody(BaseModel):
     palette: list[PaletteColor] = Field(default_factory=lambda: [PaletteColor(**p) for p in DEFAULT_PALETTE])
     carryOverLabels: bool = True
     currentTimelineIndex: int = 0
+    visitedTimelineIds: list[str] = Field(default_factory=list)
 
 
 class ProjectMeta(BaseModel):
