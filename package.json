@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:api": "cd backend && uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "setup:api": "node scripts/setup-api.mjs",
+    "dev:api": "node scripts/run-dev-api.mjs",
     "dev:all": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

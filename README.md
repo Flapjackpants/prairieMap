@@ -28,10 +28,11 @@ npm install
 npm run dev
 ```
 
-Or run both together:
+Or run both together (uses `backend/.venv` automatically — not your system Python):
 
 ```bash
 npm install
+npm run setup:api   # first time, or if API fails with missing modules
 npm run dev:all
 ```
 
@@ -73,7 +74,8 @@ src/
 | Command | Description |
 |---------|-------------|
 | `npm run dev` | Vite dev server only |
-| `npm run dev:api` | FastAPI only |
+| `npm run setup:api` | Create `backend/.venv` and install Python deps |
+| `npm run dev:api` | FastAPI only (via project venv) |
 | `npm run dev:all` | API + frontend |
 | `npm run build` | Production frontend build |
 | `cd backend && pytest` | Backend unit tests |
