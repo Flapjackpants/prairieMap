@@ -101,9 +101,13 @@ function uiReducer(state: ProjectState, action: UiAction): ProjectState {
         ),
       };
     case 'SET_TOOL':
-      return { ...state, tool: action.tool };
+      return {
+        ...state,
+        tool: action.tool,
+        selectedCountryId: action.tool === 'areaSelect' ? null : state.selectedCountryId,
+      };
     case 'SET_ACTIVE_COLOR':
-      return { ...state, activeColorId: action.colorId };
+      return { ...state, activeColorId: action.colorId, selectedCountryId: null };
     case 'TOGGLE_CARRY_LABELS':
       return { ...state, carryOverLabels: !state.carryOverLabels };
     case 'SET_VIEWPORT':
@@ -493,29 +497,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (region: PolygonRing) => {
       const target = currentTarget(currentFrame);
       if (!target) return;
-      const frame = resolveCurrentFrame(stateRef.current);
-      const selectedId = stateRef.current.selectedCountryId;
-      const selectedCountry = selectedId
-        ? frame?.frameData.annotations.countries.find((c) => c.id === selectedId)
-        : undefined;
-      const paletteFaction = activeColor;
-      if (!selectedCountry && !paletteFaction) return;
-      const factionId = selectedCountry?.factionId ?? paletteFaction!.id;
-      const factionName = selectedCountry?.name ?? paletteFaction!.name;
-      const color = selectedCountry?.color ?? paletteFaction!.hex;
+      const faction = stateRef.current.palette.find(
+        (c) => c.id === stateRef.current.activeColorId,
+      );
+      if (!faction) return;
       await runMutation(() =>
         api.addTerritoryRegion({
           project: toProjectBody(stateRef.current),
           target,
-          factionId,
-          factionName,
-          color,
+          factionId: faction.id,
+          factionName: faction.name,
+          color: faction.hex,
           region,
-          targetCountryId: selectedId,
+          targetCountryId: null,
         }),
       );
     },
-    [currentFrame, activeColor, runMutation],
+    [currentFrame, runMutation],
   );
 
   const claimAnchor = useCallback(

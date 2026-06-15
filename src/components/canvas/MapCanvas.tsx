@@ -94,12 +94,14 @@ export function MapCanvas() {
   const countries = currentFrame?.frameData.annotations.countries ?? [];
   const isMissing = currentFrame?.isMissing ?? false;
   const selectedCountry = countries.find((c) => c.id === selectedCountryId);
-  const draftColor = selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
 
   /** Konva left-drag pan (PAN tool or Space). Middle-click uses manual viewport updates. */
   const isKonvaPanDrag = tool === 'pan' || spaceHeld;
   const isPointerPanning = isKonvaPanDrag || middlePanHeld;
   const isAreaSelect = tool === 'areaSelect' && !isPointerPanning;
+  const draftColor = isAreaSelect
+    ? activeColor?.hex ?? '#00e5ff'
+    : selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
   const isSelect = tool === 'select' && !isPointerPanning;
   const isCityTool = tool === 'city' && !isPointerPanning;
   const isDivisionTool = tool === 'division' && !isPointerPanning;
@@ -377,6 +379,15 @@ export function MapCanvas() {
     [isAreaSelect, appendDraftPoint, selectedCountryId, claimAnchor],
   );
 
+  const handleSelectCountry = useCallback(
+    (id: string) => {
+      if (tool === 'areaSelect') return;
+      setSelectedMarker(null, null);
+      setSelectedCountry(id);
+    },
+    [tool, setSelectedMarker, setSelectedCountry],
+  );
+
   const fitToView = useCallback(() => {
     if (!image || !containerRef.current) return;
     const { width: cw, height: ch } = containerRef.current.getBoundingClientRect();
@@ -546,10 +557,7 @@ export function MapCanvas() {
                 <TerritoryFillsLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
-                  onSelectCountry={(id) => {
-                    setSelectedMarker(null, null);
-                    setSelectedCountry(id);
-                  }}
+                  onSelectCountry={handleSelectCountry}
                 />
                 {isPlacementTool && (
                   <Rect
@@ -605,10 +613,7 @@ export function MapCanvas() {
                   draftColor={draftColor}
                   cursorPoint={cursorPoint}
                   snapTarget={snapTarget}
-                  onSelectCountry={(id) => {
-                    setSelectedMarker(null, null);
-                    setSelectedCountry(id);
-                  }}
+                  onSelectCountry={handleSelectCountry}
                   onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>
