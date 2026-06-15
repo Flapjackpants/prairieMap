@@ -6,6 +6,7 @@ interface TerritoryFillsLayerProps {
   countries: CountryTerritory[];
   selectedCountryId: string | null;
   onSelectCountry?: (id: string) => void;
+  outlineWidth?: number;
 }
 
 /** Territory fills/outlines only (no labels or handles). */
@@ -13,6 +14,7 @@ export function TerritoryFillsLayer({
   countries,
   selectedCountryId,
   onSelectCountry,
+  outlineWidth,
 }: TerritoryFillsLayerProps) {
   return (
     <>
@@ -23,6 +25,7 @@ export function TerritoryFillsLayer({
             <CountryTerritoryShape
               country={country}
               isSelected={isSelected}
+              outlineWidth={outlineWidth}
               onSelect={() => onSelectCountry?.(country.id)}
             />
           </Group>

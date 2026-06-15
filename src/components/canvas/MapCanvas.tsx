@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva';
 import type Konva from 'konva';
 import { AlertTriangle, Map } from 'lucide-react';
+import { useLocalDisplaySettings } from '../../context/LocalDisplaySettingsContext';
 import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { normalizeClosedRing } from '../../utils/territoryGeometry';
@@ -17,6 +18,7 @@ import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 import { CityNameModal } from './CityNameModal';
 import { DivisionCropModal } from './DivisionCropModal';
+import { DisplaySettingsPanel } from '../settings/DisplaySettingsPanel';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
@@ -60,6 +62,7 @@ export function MapCanvas() {
     updateDivisionMarker,
     setFileCanvasSize,
   } = useProject();
+  const { settings: displaySettings } = useLocalDisplaySettings();
 
   const { tool, viewport, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
     state;
@@ -557,6 +560,7 @@ export function MapCanvas() {
                 <TerritoryFillsLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
+                  outlineWidth={displaySettings.territoryBorderWidth}
                   onSelectCountry={handleSelectCountry}
                 />
                 {isPlacementTool && (
@@ -591,6 +595,8 @@ export function MapCanvas() {
                   showDivisions={false}
                   showCities
                   cities={cities}
+                  cityTextSize={displaySettings.cityTextSize}
+                  cityMarkerStrokeWidth={displaySettings.cityMarkerStrokeWidth}
                   selectedMarkerId={selectedMarkerId}
                   selectedMarkerKind={selectedMarkerKind}
                   interactive={isMarkerInteractive}
@@ -609,6 +615,7 @@ export function MapCanvas() {
                   showFills={false}
                   showLabels={false}
                   showAnchorHandles={showAnchorHandles}
+                  outlineWidth={displaySettings.territoryBorderWidth}
                   draftPoints={draftPoints}
                   draftColor={draftColor}
                   cursorPoint={cursorPoint}
@@ -625,6 +632,7 @@ export function MapCanvas() {
                 />
               </Layer>
             </Stage>
+            <DisplaySettingsPanel />
           </>
         )}
 

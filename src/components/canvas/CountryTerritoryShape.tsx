@@ -8,6 +8,7 @@ interface CountryTerritoryShapeProps {
   country: CountryTerritory;
   isSelected: boolean;
   onSelect: () => void;
+  outlineWidth?: number;
 }
 
 function fillRings(
@@ -33,9 +34,10 @@ export function CountryTerritoryShape({
   country,
   isSelected,
   onSelect,
+  outlineWidth = TERRITORY_OUTLINE_WIDTH,
 }: CountryTerritoryShapeProps) {
   const outline = adjustOutlineColor(country.color, -32);
-  const strokeWidth = isSelected ? TERRITORY_OUTLINE_WIDTH + 1 : TERRITORY_OUTLINE_WIDTH;
+  const strokeWidth = isSelected ? outlineWidth + 1 : outlineWidth;
 
   return (
     <>

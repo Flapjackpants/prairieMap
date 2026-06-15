@@ -15,6 +15,8 @@ interface MarkerLayerProps {
   showCities?: boolean;
   showDivisions?: boolean;
   divisionImageMap?: Record<string, HTMLImageElement>;
+  cityTextSize?: number;
+  cityMarkerStrokeWidth?: number;
   onSelectMarker: (id: string, kind: MarkerKind) => void;
   onMoveCity: (id: string, x: number, y: number) => void;
   onMoveDivision: (id: string, x: number, y: number) => void;
@@ -102,12 +104,16 @@ export function MarkerLayer({
   showCities = true,
   showDivisions = true,
   divisionImageMap,
+  cityTextSize = 11,
+  cityMarkerStrokeWidth = 1.5,
   onSelectMarker,
   onMoveCity,
   onMoveDivision,
 }: MarkerLayerProps) {
   const citySize = DEFAULT_CITY_MARKER_SIZE;
   const halfCity = citySize / 2;
+  const cityStroke = cityMarkerStrokeWidth;
+  const cityStrokeSelected = cityMarkerStrokeWidth + 0.5;
 
   return (
     <>
@@ -134,7 +140,7 @@ export function MarkerLayer({
                 radius={halfCity}
                 fill="#ffffff"
                 stroke={isSelected ? '#00e5ff' : '#2a2a30'}
-                strokeWidth={isSelected ? 2 : 1.5}
+                strokeWidth={isSelected ? cityStrokeSelected : cityStroke}
               />
               <Text
                 x={-60}
@@ -143,7 +149,7 @@ export function MarkerLayer({
                 align="center"
                 text={city.name}
                 fontFamily={LABEL_FONT}
-                fontSize={11}
+                fontSize={cityTextSize}
                 fill="#f0f0f2"
                 listening={false}
               />

@@ -18,6 +18,7 @@ interface TerritoryLayerProps {
   showFills?: boolean;
   showLabels?: boolean;
   showAnchorHandles: boolean;
+  outlineWidth?: number;
   draftPoints: { x: number; y: number }[];
   draftColor: string;
   cursorPoint: { x: number; y: number } | null;
@@ -43,6 +44,7 @@ export function TerritoryLayer({
   showFills = true,
   showLabels = true,
   showAnchorHandles,
+  outlineWidth,
   draftPoints,
   draftColor,
   cursorPoint,
@@ -75,6 +77,7 @@ export function TerritoryLayer({
               <CountryTerritoryShape
                 country={country}
                 isSelected={isSelected}
+                outlineWidth={outlineWidth}
                 onSelect={() => onSelectCountry(country.id)}
               />
             )}
