@@ -124,6 +124,11 @@ export function GenerateRenderModal({
           <div className="space-y-2 border border-border/60 p-3">
             <p className="font-mono text-[9px] tracking-widest text-text-muted uppercase">Layers</p>
             <ToggleRow label="Background" checked={showBackground} onChange={setShowBackground} />
+            {!showBackground && (
+              <p className="font-mono text-[8px] leading-snug tracking-wide text-text-muted uppercase">
+                Map area exports with a transparent background.
+              </p>
+            )}
             <ToggleRow label="Settlements" checked={showCities} onChange={setShowCities} />
             <ToggleRow label="Divisions" checked={showDivisions} onChange={setShowDivisions} />
             <ToggleRow label="Dossier panel" checked={showDossier} onChange={setShowDossier} />

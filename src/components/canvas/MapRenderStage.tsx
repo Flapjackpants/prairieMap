@@ -100,11 +100,14 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
   );
   const showLabels =
     renderOptions.showLabels && renderOptions.territoryDisplayMode === 'color';
+  const opaqueStageBackdrop = renderOptions.showBackground;
 
   return (
     <Stage ref={stageRef} width={snapshot.width} height={snapshot.height}>
       <Layer>
-        <Rect width={snapshot.width} height={snapshot.height} fill="#121315" listening={false} />
+        {opaqueStageBackdrop && (
+          <Rect width={snapshot.width} height={snapshot.height} fill="#121315" listening={false} />
+        )}
         <Group x={offsetX} y={offsetY} scaleX={scale} scaleY={scale}>
           {renderOptions.showBackground &&
             (snapshot.image ? (
