@@ -1,6 +1,7 @@
-import { Flag, Settings2 } from 'lucide-react';
+import { Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
+import { FactionFlagSelect } from './FactionFlagSelect';
 
 export function FactionManager() {
   const { state, updateFactionMetadata } = useProject();
@@ -34,12 +35,6 @@ export function FactionManager() {
               className="border border-metal-shadow bg-surface p-2.5"
               style={{ borderLeftColor: faction.hex, borderLeftWidth: 3 }}
             >
-              <div className="mb-2 flex items-center gap-1.5">
-                <Flag className="h-3 w-3 text-text-muted" />
-                <span className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
-                  Unit_ID
-                </span>
-              </div>
               <label className="mb-1.5 block">
                 <span className="mb-0.5 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
                   Designation
@@ -52,7 +47,7 @@ export function FactionManager() {
                   }
                 />
               </label>
-              <label className="block">
+              <label className="mb-1.5 block">
                 <span className="mb-0.5 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
                   Chroma
                 </span>
@@ -74,8 +69,9 @@ export function FactionManager() {
                   />
                 </div>
               </label>
+              <FactionFlagSelect factionId={faction.id} flagFilename={faction.flagFilename} />
               <p className="mt-2 font-mono text-[9px] leading-relaxed tracking-wide text-text-muted uppercase">
-                Syncs fill, borders, labels on all frames.
+                Syncs fill, borders, labels, and flag on all frames.
               </p>
             </li>
           ))}
