@@ -1,8 +1,9 @@
-import { Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
+import { Flag, Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
 import { AddNationModal } from './AddNationModal';
+import { FlagPickerModal } from './FlagPickerModal';
 
 const TOOLS: { id: ToolMode; icon: typeof Hand; label: string; shortcut: string }[] = [
   { id: 'pan', icon: Hand, label: 'Pan (Space or middle-drag)', shortcut: 'PAN' },
@@ -29,6 +30,8 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
   const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
   const [showAddNation, setShowAddNation] = useState(false);
+  const [flagPickerFactionId, setFlagPickerFactionId] = useState<string | null>(null);
+  const flagPickerFaction = palette.find((c) => c.id === flagPickerFactionId);
 
   return (
     <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 flex-col items-center gap-1.5">
@@ -65,6 +68,16 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
           >
             <Plus className="h-3 w-3" />
           </button>
+          {activeFaction && (
+            <button
+              type="button"
+              title={activeFaction.flagFilename ? 'Change nation flag' : 'Assign nation flag'}
+              className={`btn-icon h-7 w-7 ${activeFaction.flagFilename ? 'btn-icon-active' : ''}`}
+              onClick={() => setFlagPickerFactionId(activeFaction.id)}
+            >
+              <Flag className="h-3 w-3" />
+            </button>
+          )}
         </div>
 
         <div className="mx-0.5 hidden h-7 w-px bg-border sm:block" />
@@ -150,6 +163,13 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
             setShowAddNation(false);
             void addPaletteColor(name, hex);
           }}
+        />
+      )}
+
+      {flagPickerFaction && (
+        <FlagPickerModal
+          faction={flagPickerFaction}
+          onClose={() => setFlagPickerFactionId(null)}
         />
       )}
     </div>

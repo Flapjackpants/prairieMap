@@ -41,7 +41,7 @@ export function mergeServerProject(
     projectName: body.projectName,
     assets: body.assets,
     timeline: body.timeline,
-    palette: body.palette,
+    palette: body.palette.map((p) => ({ ...p, flagFilename: p.flagFilename ?? null })),
     carryOverLabels: body.carryOverLabels,
     currentTimelineIndex: body.currentTimelineIndex,
     visitedTimelineIds: body.visitedTimelineIds ?? [],

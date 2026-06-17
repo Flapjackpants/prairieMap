@@ -3,6 +3,7 @@ import type {
   CountryTerritory,
   FrameAnnotations,
   LegacyDrawingsExport,
+  PaletteColor,
   ProjectExport,
   ProjectExportV1,
   ProjectExportV2,
@@ -26,6 +27,13 @@ function normalizeCountry(country: CountryTerritory): CountryTerritory {
     return { ...country, regionLabels: [] };
   }
   return country;
+}
+
+function normalizePalette(palette: PaletteColor[]): PaletteColor[] {
+  return palette.map((p) => ({
+    ...p,
+    flagFilename: p.flagFilename ?? null,
+  }));
 }
 
 function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][string][number] {
@@ -77,7 +85,7 @@ export function stateToExport(state: ProjectState): ProjectExportV2 {
     version: 2,
     projectName: state.projectName,
     exportedAt: new Date().toISOString(),
-    palette: state.palette,
+    palette: normalizePalette(state.palette),
     carryOverLabels: state.carryOverLabels,
     displaySettings: state.displaySettings,
     assets,
@@ -141,7 +149,7 @@ export function importToAssets(data: ProjectExport): {
       assets,
       timeline: data.timeline.map((t) => ({ ...t })),
       projectName: data.projectName,
-      palette: data.palette,
+      palette: normalizePalette(data.palette),
       carryOverLabels: data.carryOverLabels,
       displaySettings: clampDisplaySettings(data.displaySettings ?? DEFAULT_DISPLAY_SETTINGS),
     };
@@ -151,7 +159,7 @@ export function importToAssets(data: ProjectExport): {
   return {
     ...migrated,
     projectName: 'Imported Project',
-    palette: data.palette,
+    palette: normalizePalette(data.palette),
     carryOverLabels: data.carryOverLabels,
     displaySettings: DEFAULT_DISPLAY_SETTINGS,
   };

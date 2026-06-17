@@ -37,6 +37,8 @@ export interface PaletteColor {
   id: string;
   name: string;
   hex: string;
+  /** Image basename in the loaded map folder; not embedded in JSON. */
+  flagFilename: string | null;
 }
 
 /** Closed polygon as [x, y] pairs in image space */
@@ -230,10 +232,10 @@ export interface ProjectExportV1 {
 export type ProjectExport = ProjectExportV2 | ProjectExportV1;
 
 export const DEFAULT_PALETTE: PaletteColor[] = [
-  { id: 'crimson', name: 'nation1', hex: '#ff2d55' },
-  { id: 'blue', name: 'nation2', hex: '#448aff' },
-  { id: 'emerald', name: 'nation3', hex: '#00e676' },
-  { id: 'amber', name: 'nation4', hex: '#ffc400' },
+  { id: 'crimson', name: 'nation1', hex: '#ff2d55', flagFilename: null },
+  { id: 'blue', name: 'nation2', hex: '#448aff', flagFilename: null },
+  { id: 'emerald', name: 'nation3', hex: '#00e676', flagFilename: null },
+  { id: 'amber', name: 'nation4', hex: '#ffc400', flagFilename: null },
 ];
 
 export function createEmptyFrameInfo(): FrameInfo {

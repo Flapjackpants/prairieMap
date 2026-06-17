@@ -63,7 +63,7 @@ const CountryTerritoryFill = memo(
 );
 
 /** Outline rings — only re-render when selection highlight or width changes. */
-const CountryTerritoryOutline = memo(
+export const CountryTerritoryOutline = memo(
   function CountryTerritoryOutline({
     countryId,
     regions,

@@ -1,9 +1,12 @@
 import { TERRITORY_OUTLINE_WIDTH } from './project';
 
+export type TerritoryDisplayMode = 'color' | 'flag';
+
 export interface ProjectDisplaySettings {
   cityTextSize: number;
   territoryBorderWidth: number;
   cityMarkerStrokeWidth: number;
+  territoryDisplayMode: TerritoryDisplayMode;
 }
 
 export const DISPLAY_SETTINGS_LIMITS = {
@@ -16,6 +19,7 @@ export const DEFAULT_DISPLAY_SETTINGS: ProjectDisplaySettings = {
   cityTextSize: 11,
   territoryBorderWidth: TERRITORY_OUTLINE_WIDTH,
   cityMarkerStrokeWidth: 1.5,
+  territoryDisplayMode: 'color',
 };
 
 export function clampDisplaySettings(
@@ -46,5 +50,7 @@ export function clampDisplaySettings(
       DISPLAY_SETTINGS_LIMITS.cityMarkerStrokeWidth.max,
       DEFAULT_DISPLAY_SETTINGS.cityMarkerStrokeWidth,
     ),
+    territoryDisplayMode:
+      raw?.territoryDisplayMode === 'flag' ? 'flag' : DEFAULT_DISPLAY_SETTINGS.territoryDisplayMode,
   };
 }

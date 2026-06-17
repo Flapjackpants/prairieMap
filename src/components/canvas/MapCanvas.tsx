@@ -9,6 +9,7 @@ import { SNAP_THRESHOLD_PX, type MarkerKind, type ViewportState } from '../../ty
 import { isEditableTarget } from '../../utils/editableTarget';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
 import { useDivisionImageMap } from '../../hooks/useDivisionImageMap';
+import { useFlagImageMap } from '../../hooks/useFlagImageMap';
 import { useMapImageUrl } from '../../hooks/useMapImageUrl';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
@@ -455,6 +456,8 @@ export function MapCanvas() {
   }, [image?.width, image?.height, currentFrame?.filename, currentFrame?.isBlank, currentFrame?.isMissing, setFileCanvasSize]);
 
   const divisionImageMap = useDivisionImageMap(divisions, state.fileRegistry);
+  const flagImageMap = useFlagImageMap(state.palette, state.fileRegistry);
+  const showTerritoryLabels = displaySettings.territoryDisplayMode === 'color';
 
   const handleSelectMarker = useCallback(
     (id: string, kind: MarkerKind) => {
@@ -617,7 +620,7 @@ export function MapCanvas() {
                     />
                   </>
                 )}
-                <TerritoryLabelsLayer countries={countries} />
+                <TerritoryLabelsLayer countries={countries} showLabels={showTerritoryLabels} />
               </Layer>
 
               <Layer>
@@ -625,6 +628,9 @@ export function MapCanvas() {
                   countries={countries}
                   selectedCountryId={selectedCountryId}
                   outlineWidth={displaySettings.territoryBorderWidth}
+                  displayMode={displaySettings.territoryDisplayMode}
+                  palette={state.palette}
+                  flagImageMap={flagImageMap}
                   onSelectCountry={handleSelectCountry}
                 />
                 {isPlacementTool && (

@@ -42,7 +42,12 @@ def delete_country(req: DeleteCountryRequest) -> ProjectMutationResponse:
 @router.post("/update-faction-metadata", response_model=ProjectMutationResponse)
 def update_faction_metadata(req: UpdateFactionMetadataRequest) -> ProjectMutationResponse:
     project = project_service.update_faction_metadata(
-        req.project, req.factionId, req.name, req.hex
+        req.project,
+        req.factionId,
+        req.name,
+        req.hex,
+        req.flagFilename,
+        set_flag=req.setFlag,
     )
     return ProjectMutationResponse(project=project)
 

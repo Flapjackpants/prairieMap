@@ -20,6 +20,13 @@ describe('clampDisplaySettings', () => {
       cityTextSize: 28,
       territoryBorderWidth: 0.5,
       cityMarkerStrokeWidth: 3,
+      territoryDisplayMode: 'color',
     });
+  });
+
+  it('accepts flag display mode', () => {
+    expect(clampDisplaySettings({ territoryDisplayMode: 'flag' }).territoryDisplayMode).toBe(
+      'flag',
+    );
   });
 });

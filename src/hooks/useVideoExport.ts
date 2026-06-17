@@ -8,7 +8,7 @@ import { useProject } from '../context/ProjectContext';
 import type { DivisionMarker, ProjectState } from '../types/project';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { isBlankAssetKey } from '../types/project';
-import { preloadDivisionImages, waitForExportPaint } from '../utils/exportCapture';
+import { preloadDivisionImages, preloadFlagImages, waitForExportPaint } from '../utils/exportCapture';
 import { acquire } from '../utils/mapImageCache';
 import {
   citiesForSegment,
@@ -48,6 +48,7 @@ export function useVideoExport() {
   const stageRef = useRef<Konva.Stage | null>(null);
   const abortRef = useRef(false);
   const divisionImagesRef = useRef<Record<string, HTMLImageElement>>({});
+  const flagImagesRef = useRef<Record<string, HTMLImageElement>>({});
 
   const runExport = useCallback(
     async (
@@ -101,11 +102,13 @@ export function useVideoExport() {
           state.fileRegistry,
           collectDivisionsFromIndices(state, exportableIndices),
         );
+        flagImagesRef.current = await preloadFlagImages(state.fileRegistry, state.palette);
 
         const captureSnapshot = async (snap: ExportFrameSnapshot) => {
           const snapWithImages: ExportFrameSnapshot = {
             ...snap,
             divisionImages: divisionImagesRef.current,
+            flagImages: flagImagesRef.current,
           };
           flushSync(() => setSnapshot(snapWithImages));
           await waitForExportPaint(8);
@@ -147,6 +150,7 @@ export function useVideoExport() {
             divisions,
             dateTitle: resolved.frameData.info.dateTitle,
             eventLog: resolved.frameData.info.description,
+            palette: state.palette,
             displaySettings: state.displaySettings,
           };
         };

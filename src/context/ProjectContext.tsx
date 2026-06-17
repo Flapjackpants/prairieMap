@@ -210,7 +210,10 @@ interface ProjectContextValue {
   hasMarkerClipboard: boolean;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => Promise<void>;
-  updateFactionMetadata: (factionId: string, patch: { name?: string; hex?: string }) => Promise<void>;
+  updateFactionMetadata: (
+    factionId: string,
+    patch: { name?: string; hex?: string; flagFilename?: string | null },
+  ) => Promise<void>;
   exportProject: () => ProjectExport;
   importProject: (data: ProjectExport, files: File[]) => Promise<void>;
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
@@ -842,12 +845,15 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const updateFactionMetadata = useCallback(
-    async (factionId: string, patch: { name?: string; hex?: string }) => {
+    async (factionId: string, patch: { name?: string; hex?: string; flagFilename?: string | null }) => {
+      const setFlag = patch.flagFilename !== undefined;
       await runMutation(() =>
         api.updateFactionMetadata({
           project: toProjectBody(stateRef.current),
           factionId,
-          ...patch,
+          name: patch.name,
+          hex: patch.hex,
+          ...(setFlag ? { flagFilename: patch.flagFilename, setFlag: true } : {}),
         }),
       );
     },

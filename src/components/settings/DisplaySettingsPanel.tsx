@@ -97,6 +97,21 @@ export function DisplaySettingsPanel() {
           step={0.5}
           onCommit={(cityMarkerStrokeWidth) => commit({ cityMarkerStrokeWidth })}
         />
+        <label className="flex flex-col gap-1 font-mono text-[9px] tracking-widest text-text-muted uppercase">
+          Territory display
+          <select
+            className="w-full border border-border bg-surface px-2 py-1 font-mono text-xs text-text-primary normal-case"
+            value={settings.territoryDisplayMode}
+            onChange={(e) =>
+              commit({
+                territoryDisplayMode: e.target.value === 'flag' ? 'flag' : 'color',
+              })
+            }
+          >
+            <option value="color">Color + labels</option>
+            <option value="flag">Flag fill</option>
+          </select>
+        </label>
         <button
           type="button"
           className="btn-secondary flex items-center justify-center gap-1.5 py-1 font-mono text-[9px] tracking-wider uppercase"

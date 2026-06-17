@@ -72,6 +72,8 @@ export async function updateFactionMetadata(params: {
   factionId: string;
   name?: string;
   hex?: string;
+  flagFilename?: string | null;
+  setFlag?: boolean;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/update-faction-metadata', {
     method: 'POST',

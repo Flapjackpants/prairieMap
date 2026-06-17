@@ -487,18 +487,24 @@ def add_palette_color(project: ProjectBody, name: str, hex_color: str) -> Projec
 
 
 def update_faction_metadata(
-    project: ProjectBody, faction_id: str, name: str | None, hex_color: str | None
+    project: ProjectBody,
+    faction_id: str,
+    name: str | None,
+    hex_color: str | None,
+    flag_filename: str | None = None,
+    *,
+    set_flag: bool = False,
 ) -> ProjectBody:
     palette_entry = next((p for p in project.palette if p.id == faction_id), None)
     if not palette_entry:
         return project
     next_name = name if name is not None else palette_entry.name
     next_hex = hex_color if hex_color is not None else palette_entry.hex
+    palette_updates: dict[str, object] = {"name": next_name, "hex": next_hex}
+    if set_flag:
+        palette_updates["flagFilename"] = flag_filename
     palette = [
-        p.model_copy(update={"name": next_name, "hex": next_hex})
-        if p.id == faction_id
-        else p
-        for p in project.palette
+        p.model_copy(update=palette_updates) if p.id == faction_id else p for p in project.palette
     ]
     assets: dict[str, list[AssetFrameState]] = {}
     for filename, copies in project.assets.items():

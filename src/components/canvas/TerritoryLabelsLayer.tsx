@@ -5,12 +5,15 @@ import { CurvedRegionLabels } from './CurvedRegionLabels';
 
 interface TerritoryLabelsLayerProps {
   countries: CountryTerritory[];
+  showLabels?: boolean;
 }
 
 /** Curved nation labels only (no fills or handles). */
 export const TerritoryLabelsLayer = memo(function TerritoryLabelsLayer({
   countries,
+  showLabels = true,
 }: TerritoryLabelsLayerProps) {
+  if (!showLabels) return null;
   return (
     <>
       {countries.map((country) => (

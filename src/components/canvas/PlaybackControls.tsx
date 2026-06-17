@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  Camera,
   ChevronFirst,
   ChevronLast,
   Clapperboard,
@@ -11,15 +12,20 @@ import {
 import { useProject } from '../../context/ProjectContext';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useVideoExport } from '../../hooks/useVideoExport';
+import { useFrameRender } from '../../hooks/useFrameRender';
 import { ExportFrameStage } from './ExportFrameStage';
 import { ExportVideoModal } from './ExportVideoModal';
+import { GenerateRenderModal } from './GenerateRenderModal';
+import { MapRenderStage } from './MapRenderStage';
 
 export function PlaybackControls() {
   const { state, setTimelineIndex, nextFrame, prevFrame, apiReady } = useProject();
   const { timeline, currentTimelineIndex } = state;
   const { isPlaying, canPlay, togglePlay, goToStart, goToEnd } = usePlayback();
   const video = useVideoExport();
+  const frameRender = useFrameRender();
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showRenderModal, setShowRenderModal] = useState(false);
 
   const hasFrames = timeline.length > 0;
 
@@ -34,6 +40,15 @@ export function PlaybackControls() {
   return (
     <>
       <ExportFrameStage snapshot={video.snapshot} stageRef={video.stageRef} />
+      {frameRender.snapshot && frameRender.renderOptions && (
+        <div className="pointer-events-none fixed -left-[10000px] top-0 opacity-0" aria-hidden>
+          <MapRenderStage
+            snapshot={frameRender.snapshot}
+            renderOptions={frameRender.renderOptions}
+            stageRef={frameRender.stageRef}
+          />
+        </div>
+      )}
       {showExportModal && (
         <ExportVideoModal
           frameCount={timeline.length}
@@ -51,6 +66,17 @@ export function PlaybackControls() {
             setShowExportModal(false);
           }}
           onClose={() => setShowExportModal(false)}
+        />
+      )}
+
+      {showRenderModal && (
+        <GenerateRenderModal
+          isRendering={frameRender.isRendering}
+          error={frameRender.error}
+          onRender={(options) => {
+            void frameRender.runRender(options).finally(() => setShowRenderModal(false));
+          }}
+          onClose={() => setShowRenderModal(false)}
         />
       )}
 
@@ -113,6 +139,19 @@ export function PlaybackControls() {
               title="Last frame"
             >
               <ChevronLast className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              className={`btn-icon flex h-8 shrink-0 items-center gap-1 px-2 ${
+                hasFrames && !frameRender.isRendering ? 'text-accent-cyan' : ''
+              }`}
+              disabled={!hasFrames || frameRender.isRendering}
+              onClick={() => setShowRenderModal(true)}
+              title="Generate PNG of current frame"
+            >
+              <Camera className="h-4 w-4 shrink-0" />
+              <span className="font-mono text-[8px] font-bold tracking-wider">PNG</span>
             </button>
 
             <button

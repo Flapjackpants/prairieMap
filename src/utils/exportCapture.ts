@@ -1,4 +1,4 @@
-import type { DivisionMarker } from '../types/project';
+import type { DivisionMarker, PaletteColor } from '../types/project';
 import { isBlankAssetKey } from '../types/project';
 import type { FileRegistryEntry } from '../types/project';
 import { acquire } from './mapImageCache';
@@ -22,6 +22,33 @@ export async function preloadDivisionImages(
       divisions
         .map((d) => d.sourceFilename)
         .filter((f) => f && !isBlankAssetKey(f)),
+    ),
+  ];
+  const map: Record<string, HTMLImageElement> = {};
+  await Promise.all(
+    filenames.map(async (filename) => {
+      const file = fileRegistry[filename]?.file;
+      if (!file) return;
+      const url = acquire(filename, file);
+      try {
+        map[filename] = await loadImageFromUrl(url);
+      } catch {
+        /* missing asset */
+      }
+    }),
+  );
+  return map;
+}
+
+export async function preloadFlagImages(
+  fileRegistry: Record<string, FileRegistryEntry>,
+  palette: PaletteColor[],
+): Promise<Record<string, HTMLImageElement>> {
+  const filenames = [
+    ...new Set(
+      palette
+        .map((p) => p.flagFilename)
+        .filter((f): f is string => Boolean(f && !isBlankAssetKey(f))),
     ),
   ];
   const map: Record<string, HTMLImageElement> = {};

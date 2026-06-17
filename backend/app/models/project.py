@@ -17,6 +17,7 @@ class PaletteColor(BaseModel):
     id: str
     name: str
     hex: str
+    flagFilename: str | None = None
 
 
 class CountryLabelSettings(BaseModel):
@@ -117,6 +118,7 @@ class ProjectDisplaySettings(BaseModel):
     cityTextSize: float = 11
     territoryBorderWidth: float = 1.5
     cityMarkerStrokeWidth: float = 1.5
+    territoryDisplayMode: Literal["color", "flag"] = "color"
 
 
 class ProjectBody(BaseModel):
@@ -190,6 +192,8 @@ class UpdateFactionMetadataRequest(BaseModel):
     factionId: str
     name: str | None = None
     hex: str | None = None
+    flagFilename: str | None = None
+    setFlag: bool = False
 
 
 class AddPaletteColorRequest(BaseModel):
