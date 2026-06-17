@@ -12,6 +12,7 @@ import type {
 } from '../types/project';
 import { v4 as uuidv4 } from 'uuid';
 import { createEmptyAnnotations, createEmptyAssetState } from '../types/project';
+import { clampDisplaySettings, DEFAULT_DISPLAY_SETTINGS } from '../types/displaySettings';
 import { recomputeCountryLabels } from './territoryGeometry';
 
 function normalizeCountry(country: CountryTerritory): CountryTerritory {
@@ -78,6 +79,7 @@ export function stateToExport(state: ProjectState): ProjectExportV2 {
     exportedAt: new Date().toISOString(),
     palette: state.palette,
     carryOverLabels: state.carryOverLabels,
+    displaySettings: state.displaySettings,
     assets,
     timeline: state.timeline.map((t) => ({ ...t })),
   };
@@ -128,6 +130,7 @@ export function importToAssets(data: ProjectExport): {
   projectName: string;
   palette: ProjectExportV2['palette'];
   carryOverLabels: boolean;
+  displaySettings: ProjectExportV2['displaySettings'];
 } {
   if (isV2Export(data)) {
     const assets: Record<string, AssetFrameState[]> = {};
@@ -140,6 +143,7 @@ export function importToAssets(data: ProjectExport): {
       projectName: data.projectName,
       palette: data.palette,
       carryOverLabels: data.carryOverLabels,
+      displaySettings: clampDisplaySettings(data.displaySettings ?? DEFAULT_DISPLAY_SETTINGS),
     };
   }
 
@@ -149,6 +153,7 @@ export function importToAssets(data: ProjectExport): {
     projectName: 'Imported Project',
     palette: data.palette,
     carryOverLabels: data.carryOverLabels,
+    displaySettings: DEFAULT_DISPLAY_SETTINGS,
   };
 }
 

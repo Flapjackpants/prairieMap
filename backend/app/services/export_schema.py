@@ -11,6 +11,7 @@ from app.models.project import (
     FrameInfo,
     PaletteColor,
     ProjectBody,
+    ProjectDisplaySettings,
     ProjectExportV2,
     TimelineEntry,
 )
@@ -93,6 +94,7 @@ def state_to_export(project: ProjectBody) -> ProjectExportV2:
         exportedAt=datetime.now(timezone.utc).isoformat(),
         palette=project.palette,
         carryOverLabels=project.carryOverLabels,
+        displaySettings=project.displaySettings,
         assets=assets,
         timeline=[t.model_copy() for t in project.timeline],
     )
@@ -137,6 +139,9 @@ def import_to_project(data: dict[str, Any]) -> ProjectBody:
             timeline=[TimelineEntry.model_validate(t) for t in data.get("timeline") or []],
             palette=[PaletteColor.model_validate(p) for p in data.get("palette") or []],
             carryOverLabels=data.get("carryOverLabels", True),
+            displaySettings=ProjectDisplaySettings.model_validate(
+                data.get("displaySettings") or {}
+            ),
             currentTimelineIndex=0,
         )
     assets, timeline = migrate_v1_to_assets(data)

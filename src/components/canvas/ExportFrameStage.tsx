@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Group, Image as KonvaImage, Layer, Rect, Stage, Text } from 'react-konva';
 import type Konva from 'konva';
-import type { CityMarker, CountryTerritory, DivisionMarker } from '../../types/project';
+import type { CityMarker, CountryTerritory, DivisionMarker, ProjectDisplaySettings } from '../../types/project';
 import {
   estimateEventLogLines,
   formatEventLogForExport,
@@ -22,6 +22,7 @@ export interface ExportFrameSnapshot {
   dateTitle: string;
   eventLog: string;
   divisionImages?: Record<string, HTMLImageElement>;
+  displaySettings: ProjectDisplaySettings;
 }
 
 interface ExportFrameStageProps {
@@ -120,7 +121,11 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
                 />
               </>
             )}
-            <TerritoryFillsLayer countries={snapshot.countries} selectedCountryId={null} />
+            <TerritoryFillsLayer
+              countries={snapshot.countries}
+              selectedCountryId={null}
+              outlineWidth={snapshot.displaySettings.territoryBorderWidth}
+            />
             <MarkerLayer
               showCities={false}
               showDivisions
@@ -138,6 +143,8 @@ export function ExportFrameStage({ snapshot, stageRef }: ExportFrameStageProps) 
               showDivisions={false}
               showCities
               cities={snapshot.cities}
+              cityTextSize={snapshot.displaySettings.cityTextSize}
+              cityMarkerStrokeWidth={snapshot.displaySettings.cityMarkerStrokeWidth}
               selectedMarkerId={null}
               selectedMarkerKind={null}
               interactive={false}

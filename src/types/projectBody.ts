@@ -1,9 +1,11 @@
 import type {
   AssetFrameState,
   PaletteColor,
+  ProjectDisplaySettings,
   ProjectState,
   TimelineEntry,
 } from './project';
+import { clampDisplaySettings, DEFAULT_DISPLAY_SETTINGS } from './displaySettings';
 
 /** Server-persisted slice (no fileRegistry / UI-only fields). */
 export interface ProjectBody {
@@ -14,6 +16,7 @@ export interface ProjectBody {
   carryOverLabels: boolean;
   currentTimelineIndex: number;
   visitedTimelineIds: string[];
+  displaySettings: ProjectDisplaySettings;
 }
 
 export function toProjectBody(state: ProjectState): ProjectBody {
@@ -25,6 +28,7 @@ export function toProjectBody(state: ProjectState): ProjectBody {
     carryOverLabels: state.carryOverLabels,
     currentTimelineIndex: state.currentTimelineIndex,
     visitedTimelineIds: state.visitedTimelineIds,
+    displaySettings: state.displaySettings,
   };
 }
 
@@ -41,5 +45,6 @@ export function mergeServerProject(
     carryOverLabels: body.carryOverLabels,
     currentTimelineIndex: body.currentTimelineIndex,
     visitedTimelineIds: body.visitedTimelineIds ?? [],
+    displaySettings: clampDisplaySettings(body.displaySettings ?? DEFAULT_DISPLAY_SETTINGS),
   };
 }

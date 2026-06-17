@@ -1,28 +1,29 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva';
 import type Konva from 'konva';
 import { AlertTriangle, Map } from 'lucide-react';
-import { useLocalDisplaySettings } from '../../context/LocalDisplaySettingsContext';
 import { useProject } from '../../context/ProjectContext';
 import { displayFilename } from '../../utils/projectHelpers';
 import { normalizeClosedRing } from '../../utils/territoryGeometry';
-import { SNAP_THRESHOLD_PX } from '../../types/project';
+import { SNAP_THRESHOLD_PX, type MarkerKind, type ViewportState } from '../../types/project';
 import { isEditableTarget } from '../../utils/editableTarget';
 import { collectSnapVertices, findSnapTarget, type SnapVertex } from '../../utils/vertexSnap';
+import { useDivisionImageMap } from '../../hooks/useDivisionImageMap';
 import { useMapImageUrl } from '../../hooks/useMapImageUrl';
 import { CanvasToolbar } from './CanvasToolbar';
 import { PlaybackControls } from './PlaybackControls';
 import { TerritoryLayer } from './TerritoryLayer';
+import { DraftOverlay, type DraftOverlayHandle } from './DraftOverlay';
 import { TerritoryFillsLayer } from './TerritoryFillsLayer';
 import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 import { CityNameModal } from './CityNameModal';
 import { DivisionCropModal } from './DivisionCropModal';
-import { DisplaySettingsPanel } from '../settings/DisplaySettingsPanel';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
 const MIN_POLYGON_POINTS = 3;
+const DEFAULT_VIEWPORT: ViewportState = { scale: 1, x: 0, y: 0 };
 
 function useLoadedImage(url: string | null) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
@@ -49,7 +50,6 @@ export function MapCanvas() {
     state,
     currentFrame,
     activeColor,
-    setViewport,
     addTerritoryRegion,
     claimAnchor,
     removeTerritoryVertex,
@@ -62,9 +62,12 @@ export function MapCanvas() {
     updateDivisionMarker,
     setFileCanvasSize,
   } = useProject();
-  const { settings: displaySettings } = useLocalDisplaySettings();
+  const displaySettings = state.displaySettings;
+  const [viewport, setViewport] = useState<ViewportState>(DEFAULT_VIEWPORT);
+  const liveViewportRef = useRef<ViewportState>(DEFAULT_VIEWPORT);
+  const middlePanActiveRef = useRef(false);
 
-  const { tool, viewport, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
+  const { tool, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
     state;
   const [cropDivisionId, setCropDivisionId] = useState<string | null>(null);
   const [pendingCityPlacement, setPendingCityPlacement] = useState<{ x: number; y: number } | null>(
@@ -74,13 +77,31 @@ export function MapCanvas() {
   const stageRef = useRef<Konva.Stage>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
   const [draftPoints, setDraftPoints] = useState<{ x: number; y: number }[]>([]);
-  const [cursorPoint, setCursorPoint] = useState<{ x: number; y: number } | null>(null);
-  const [snapTarget, setSnapTarget] = useState<SnapVertex | null>(null);
+  const draftOverlayRef = useRef<DraftOverlayHandle>(null);
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [middlePanHeld, setMiddlePanHeld] = useState(false);
   const middlePanRef = useRef({ active: false, lastX: 0, lastY: 0 });
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  liveViewportRef.current = viewport;
+
+  const applyStageViewport = useCallback((v: ViewportState) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.position({ x: v.x, y: v.y });
+    stage.scale({ x: v.scale, y: v.scale });
+    stage.batchDraw();
+  }, []);
+
+  const commitViewport = useCallback(
+    (v: ViewportState) => {
+      liveViewportRef.current = v;
+      viewportRef.current = v;
+      setViewport(v);
+      applyStageViewport(v);
+    },
+    [applyStageViewport],
+  );
 
   const mapFile =
     currentFrame && !currentFrame.isMissing && !currentFrame.isBlank
@@ -94,7 +115,10 @@ export function MapCanvas() {
     Boolean(currentFrame && !currentFrame.isMissing && !currentFrame.isBlank && mapFile),
   );
   const image = useLoadedImage(mapImageUrl);
-  const countries = currentFrame?.frameData.annotations.countries ?? [];
+  const countries = useMemo(
+    () => currentFrame?.frameData.annotations.countries ?? [],
+    [currentFrame?.entry.id, currentFrame?.frameData.annotations.countries],
+  );
   const isMissing = currentFrame?.isMissing ?? false;
   const selectedCountry = countries.find((c) => c.id === selectedCountryId);
 
@@ -128,8 +152,7 @@ export function MapCanvas() {
 
   useEffect(() => {
     setDraftPoints([]);
-    setCursorPoint(null);
-    setSnapTarget(null);
+    draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
   }, [currentFrame?.entry.id]);
 
   useEffect(() => {
@@ -157,14 +180,13 @@ export function MapCanvas() {
   const closeDraftPolygon = useCallback(() => {
     if (draftPoints.length < MIN_POLYGON_POINTS) {
       setDraftPoints([]);
-      setCursorPoint(null);
+      draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
       return;
     }
     const ring = normalizeClosedRing(draftPoints);
     addTerritoryRegion(ring);
     setDraftPoints([]);
-    setCursorPoint(null);
-    setSnapTarget(null);
+    draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
   }, [draftPoints, addTerritoryRegion]);
 
   useEffect(() => {
@@ -187,8 +209,7 @@ export function MapCanvas() {
       }
       if (e.key === 'Escape') {
         setDraftPoints([]);
-        setCursorPoint(null);
-        setSnapTarget(null);
+        draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
         return;
       }
       if (e.key === 'Backspace') {
@@ -229,6 +250,7 @@ export function MapCanvas() {
         /* ignore */
       }
       middlePanRef.current = { active: true, lastX: e.clientX, lastY: e.clientY };
+      middlePanActiveRef.current = true;
       setMiddlePanHeld(true);
     };
 
@@ -242,12 +264,21 @@ export function MapCanvas() {
       const dy = e.clientY - middlePanRef.current.lastY;
       middlePanRef.current.lastX = e.clientX;
       middlePanRef.current.lastY = e.clientY;
-      const v = viewportRef.current;
-      setViewport({ ...v, x: v.x + dx, y: v.y + dy });
+      const v = liveViewportRef.current;
+      const next = { ...v, x: v.x + dx, y: v.y + dy };
+      liveViewportRef.current = next;
+      viewportRef.current = next;
+      applyStageViewport(next);
     };
 
     const onPointerUp = (e: PointerEvent) => {
-      if (e.button === 1) endMiddlePan();
+      if (e.button === 1) {
+        if (middlePanRef.current.active) {
+          middlePanActiveRef.current = false;
+          setViewport(liveViewportRef.current);
+        }
+        endMiddlePan();
+      }
       try {
         if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
       } catch {
@@ -273,7 +304,7 @@ export function MapCanvas() {
       el.removeEventListener('auxclick', blockMiddleAutoscroll, true);
       el.removeEventListener('mousedown', blockMiddleAutoscroll, true);
     };
-  }, [setViewport, currentFrame?.entry.id]);
+  }, [applyStageViewport, currentFrame?.entry.id]);
 
   const handleWheel = useCallback(
     (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -297,27 +328,34 @@ export function MapCanvas() {
         y: (pointer.y - viewport.y) / oldScale,
       };
 
-      setViewport({
+      commitViewport({
         scale: newScale,
         x: pointer.x - mousePointTo.x * newScale,
         y: pointer.y - mousePointTo.y * newScale,
       });
     },
-    [viewport, setViewport],
+    [viewport, commitViewport],
   );
 
-  const handleStageMouseMove = () => {
+  const snapMoveRafRef = useRef<number | null>(null);
+  const handleStageMouseMove = useCallback(() => {
     if (!isAreaSelect) {
-      setCursorPoint(null);
-      setSnapTarget(null);
+      draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
+      if (containerRef.current) containerRef.current.style.cursor = '';
       return;
     }
-    const raw = getPointerOnImage();
-    if (!raw) return;
-    const { x, y, snap } = resolveSnap(raw);
-    setCursorPoint({ x, y });
-    setSnapTarget(snap);
-  };
+    if (snapMoveRafRef.current !== null) return;
+    snapMoveRafRef.current = requestAnimationFrame(() => {
+      snapMoveRafRef.current = null;
+      const raw = getPointerOnImage();
+      if (!raw) return;
+      const { x, y, snap } = resolveSnap(raw);
+      draftOverlayRef.current?.updatePreview({ x, y }, snap, viewportRef.current.scale);
+      if (containerRef.current) {
+        containerRef.current.style.cursor = snap ? 'cell' : 'crosshair';
+      }
+    });
+  }, [isAreaSelect, getPointerOnImage, resolveSnap]);
 
   const handlePlacementClick = useCallback(() => {
     const raw = getPointerOnImage();
@@ -385,10 +423,9 @@ export function MapCanvas() {
   const handleSelectCountry = useCallback(
     (id: string) => {
       if (tool === 'areaSelect') return;
-      setSelectedMarker(null, null);
       setSelectedCountry(id);
     },
-    [tool, setSelectedMarker, setSelectedCountry],
+    [tool, setSelectedCountry],
   );
 
   const fitToView = useCallback(() => {
@@ -400,12 +437,12 @@ export function MapCanvas() {
       (ch - padding) / image.height,
       1,
     );
-    setViewport({
+    commitViewport({
       scale,
       x: (cw - image.width * scale) / 2,
       y: (ch - image.height * scale) / 2,
     });
-  }, [image, setViewport]);
+  }, [image, commitViewport]);
 
   useEffect(() => {
     if (image) fitToView();
@@ -415,7 +452,31 @@ export function MapCanvas() {
     if (image && currentFrame && !currentFrame.isBlank && !currentFrame.isMissing) {
       setFileCanvasSize(currentFrame.filename, image.width, image.height);
     }
-  }, [image, currentFrame, setFileCanvasSize]);
+  }, [image?.width, image?.height, currentFrame?.filename, currentFrame?.isBlank, currentFrame?.isMissing, setFileCanvasSize]);
+
+  const divisionImageMap = useDivisionImageMap(divisions, state.fileRegistry);
+
+  const handleSelectMarker = useCallback(
+    (id: string, kind: MarkerKind) => {
+      setSelectedCountry(null);
+      setSelectedMarker(id, kind);
+    },
+    [setSelectedCountry, setSelectedMarker],
+  );
+
+  const handleMoveCity = useCallback(
+    (id: string, x: number, y: number) => {
+      void updateCityMarker(id, { x, y });
+    },
+    [updateCityMarker],
+  );
+
+  const handleMoveDivision = useCallback(
+    (id: string, x: number, y: number) => {
+      void updateDivisionMarker(id, { x, y });
+    },
+    [updateDivisionMarker],
+  );
 
   const canvasWidth = image?.width ?? currentFrame?.canvasWidth ?? 1920;
   const canvasHeight = image?.height ?? currentFrame?.canvasHeight ?? 1080;
@@ -430,12 +491,12 @@ export function MapCanvas() {
       (ch - padding) / canvasHeight,
       1,
     );
-    setViewport({
+    commitViewport({
       scale,
       x: (cw - canvasWidth * scale) / 2,
       y: (ch - canvasHeight * scale) / 2,
     });
-  }, [canvasWidth, canvasHeight, setViewport]);
+  }, [canvasWidth, canvasHeight, commitViewport]);
 
   useEffect(() => {
     if (currentFrame && !image) fitBlankToView();
@@ -446,9 +507,7 @@ export function MapCanvas() {
     : isKonvaPanDrag
       ? 'grab'
       : isAreaSelect
-      ? snapTarget
-        ? 'cell'
-        : 'crosshair'
+      ? 'crosshair'
       : tool === 'select'
         ? 'pointer'
         : isCityTool || isDivisionTool
@@ -515,6 +574,7 @@ export function MapCanvas() {
               y={viewport.y}
               scaleX={viewport.scale}
               scaleY={viewport.scale}
+              perfectDrawEnabled={false}
               onWheel={handleWheel}
               onMouseMove={handleStageMouseMove}
               onClick={handleStageClick}
@@ -522,7 +582,7 @@ export function MapCanvas() {
               onDragEnd={(e) => {
                 if (!isKonvaPanDrag) return;
                 const v = viewportRef.current;
-                setViewport({
+                commitViewport({
                   ...v,
                   x: e.target.x(),
                   y: e.target.y(),
@@ -530,13 +590,14 @@ export function MapCanvas() {
               }}
               style={{ cursor }}
             >
-              <Layer>
+              <Layer listening={false}>
                 {image ? (
                   <KonvaImage
                     image={image}
                     width={canvasWidth}
                     height={canvasHeight}
                     listening={false}
+                    perfectDrawEnabled={false}
                   />
                 ) : (
                   <>
@@ -556,7 +617,10 @@ export function MapCanvas() {
                     />
                   </>
                 )}
+                <TerritoryLabelsLayer countries={countries} />
+              </Layer>
 
+              <Layer>
                 <TerritoryFillsLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
@@ -580,17 +644,14 @@ export function MapCanvas() {
                   showCities={false}
                   showDivisions
                   divisions={divisions}
+                  divisionImageMap={divisionImageMap}
                   selectedMarkerId={selectedMarkerId}
                   selectedMarkerKind={selectedMarkerKind}
                   interactive={isMarkerInteractive}
-                  onSelectMarker={(id, kind) => {
-                    setSelectedCountry(null);
-                    setSelectedMarker(id, kind);
-                  }}
-                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
-                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
+                  onSelectMarker={handleSelectMarker}
+                  onMoveCity={handleMoveCity}
+                  onMoveDivision={handleMoveDivision}
                 />
-                <TerritoryLabelsLayer countries={countries} />
                 <MarkerLayer
                   showDivisions={false}
                   showCities
@@ -600,13 +661,13 @@ export function MapCanvas() {
                   selectedMarkerId={selectedMarkerId}
                   selectedMarkerKind={selectedMarkerKind}
                   interactive={isMarkerInteractive}
-                  onSelectMarker={(id, kind) => {
-                    setSelectedCountry(null);
-                    setSelectedMarker(id, kind);
-                  }}
-                  onMoveCity={(id, x, y) => void updateCityMarker(id, { x, y })}
-                  onMoveDivision={(id, x, y) => void updateDivisionMarker(id, { x, y })}
+                  onSelectMarker={handleSelectMarker}
+                  onMoveCity={handleMoveCity}
+                  onMoveDivision={handleMoveDivision}
                 />
+              </Layer>
+
+              <Layer>
                 <TerritoryLayer
                   countries={countries}
                   selectedCountryId={selectedCountryId}
@@ -616,12 +677,7 @@ export function MapCanvas() {
                   showLabels={false}
                   showAnchorHandles={showAnchorHandles}
                   outlineWidth={displaySettings.territoryBorderWidth}
-                  draftPoints={draftPoints}
-                  draftColor={draftColor}
-                  cursorPoint={cursorPoint}
-                  snapTarget={snapTarget}
                   onSelectCountry={handleSelectCountry}
-                  onRemoveDraftAnchor={removeDraftAnchor}
                   onClaimAnchor={handleAnchorPick}
                   onRemoveTerritoryVertex={(countryId, ringIndex, vertexIndex) =>
                     void removeTerritoryVertex(countryId, ringIndex, vertexIndex)
@@ -630,9 +686,18 @@ export function MapCanvas() {
                     void moveTerritoryVertex(countryId, ringIndex, vertexIndex, x, y)
                   }
                 />
+                {isAreaSelect && (
+                  <DraftOverlay
+                    ref={draftOverlayRef}
+                    draftPoints={draftPoints}
+                    draftColor={draftColor}
+                    viewportScale={viewport.scale}
+                    snapThreshold={snapThreshold}
+                    onRemoveDraftAnchor={removeDraftAnchor}
+                  />
+                )}
               </Layer>
             </Stage>
-            <DisplaySettingsPanel />
           </>
         )}
 

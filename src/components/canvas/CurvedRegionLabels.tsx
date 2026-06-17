@@ -1,14 +1,14 @@
-import { Group, Text } from 'react-konva';
-import { useMemo } from 'react';
+import { Group } from 'react-konva';
+import { memo, useMemo } from 'react';
 import type { CountryTerritory, RegionLabelPlacement } from '../../types/project';
 import {
-  defaultCharWidth,
+  equalSpacingStep,
   exteriorRingsOnly,
+  layoutGlyphs,
   layoutGlyphsForRegion,
 } from '../../utils/curvedLabel';
 import { computeRegionLabels } from '../../utils/territoryGeometry';
-
-const LABEL_FONT = 'JetBrains Mono, monospace';
+import { CachedLabelGroup } from './CachedLabelGroup';
 
 interface CurvedRegionLabelsProps {
   country: CountryTerritory;
@@ -37,7 +37,10 @@ function resolvePlacements(
   return country.regionLabels;
 }
 
-export function CurvedRegionLabels({ country, allCountries }: CurvedRegionLabelsProps) {
+export const CurvedRegionLabels = memo(function CurvedRegionLabels({
+  country,
+  allCountries,
+}: CurvedRegionLabelsProps) {
   const foreignRings = useMemo(
     () => foreignRingsFor(country.id, allCountries),
     [country.id, allCountries],
@@ -57,6 +60,17 @@ export function CurvedRegionLabels({ country, allCountries }: CurvedRegionLabels
       .map((ring, i) => {
         const placement = placements[i];
         const baseFontSize = placement?.fontSize ?? 14;
+
+        if (placement?.spine) {
+          const letterSpacing = placement.letterSpacing ?? equalSpacingStep(baseFontSize);
+          const glyphs = layoutGlyphs(displayName, placement.spine, baseFontSize, letterSpacing);
+          if (glyphs.length === 0) return null;
+          return {
+            key: `${country.id}-label-${i}`,
+            fontSize: baseFontSize,
+            glyphs,
+          };
+        }
 
         const { fontSize, glyphs } = layoutGlyphsForRegion(
           displayName,
@@ -80,32 +94,13 @@ export function CurvedRegionLabels({ country, allCountries }: CurvedRegionLabels
   return (
     <Group listening={false}>
       {glyphGroups.map((group) => (
-        <Group key={group.key} listening={false}>
-          {group.glyphs.map((g, gi) => {
-            const charW = defaultCharWidth(group.fontSize);
-            return (
-              <Text
-                key={`${group.key}-${gi}`}
-                x={g.x}
-                y={g.y}
-                text={g.char}
-                fontSize={group.fontSize}
-                fill="#f0f0f5"
-                fontFamily={LABEL_FONT}
-                fontStyle="bold"
-                rotation={g.rotation}
-                align="center"
-                verticalAlign="middle"
-                offsetX={charW / 2}
-                offsetY={group.fontSize / 2}
-                shadowColor="rgba(0,0,0,0.9)"
-                shadowBlur={5}
-                shadowOffset={{ x: 1, y: 1 }}
-              />
-            );
-          })}
-        </Group>
+        <CachedLabelGroup
+          key={group.key}
+          cacheKey={group.key}
+          fontSize={group.fontSize}
+          glyphs={group.glyphs}
+        />
       ))}
     </Group>
   );
-}
+});

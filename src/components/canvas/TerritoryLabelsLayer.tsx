@@ -1,4 +1,5 @@
 import { Group } from 'react-konva';
+import { memo } from 'react';
 import type { CountryTerritory } from '../../types/project';
 import { CurvedRegionLabels } from './CurvedRegionLabels';
 
@@ -7,7 +8,9 @@ interface TerritoryLabelsLayerProps {
 }
 
 /** Curved nation labels only (no fills or handles). */
-export function TerritoryLabelsLayer({ countries }: TerritoryLabelsLayerProps) {
+export const TerritoryLabelsLayer = memo(function TerritoryLabelsLayer({
+  countries,
+}: TerritoryLabelsLayerProps) {
   return (
     <>
       {countries.map((country) => (
@@ -19,4 +22,4 @@ export function TerritoryLabelsLayer({ countries }: TerritoryLabelsLayerProps) {
       ))}
     </>
   );
-}
+});

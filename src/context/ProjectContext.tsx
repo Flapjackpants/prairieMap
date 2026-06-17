@@ -25,9 +25,10 @@ import {
   type ProjectState,
   type ResolvedFrame,
   type ToolMode,
-  type ViewportState,
   DEFAULT_DIVISION_MARKER_SIZE,
 } from '../types/project';
+import type { ProjectDisplaySettings } from '../types/displaySettings';
+import { DEFAULT_DISPLAY_SETTINGS } from '../types/displaySettings';
 import { mergeServerProject, toProjectBody } from '../types/projectBody';
 import { getNextMapFilename } from '../utils/projectHelpers';
 import {
@@ -54,7 +55,7 @@ type UiAction =
   | { type: 'SET_TOOL'; tool: ToolMode }
   | { type: 'SET_ACTIVE_COLOR'; colorId: string }
   | { type: 'TOGGLE_CARRY_LABELS' }
-  | { type: 'SET_VIEWPORT'; viewport: ViewportState }
+  | { type: 'SET_DISPLAY_SETTINGS'; displaySettings: ProjectDisplaySettings }
   | { type: 'SET_SELECTED_COUNTRY'; countryId: string | null }
   | {
       type: 'SET_SELECTED_MARKER';
@@ -75,8 +76,8 @@ const initialState: ProjectState = {
   activeColorId: DEFAULT_PALETTE[0].id,
   tool: 'pan',
   carryOverLabels: true,
+  displaySettings: DEFAULT_DISPLAY_SETTINGS,
   visitedTimelineIds: [],
-  viewport: { scale: 1, x: 0, y: 0 },
   selectedCountryId: null,
   selectedMarkerId: null,
   selectedMarkerKind: null,
@@ -110,8 +111,8 @@ function uiReducer(state: ProjectState, action: UiAction): ProjectState {
       return { ...state, activeColorId: action.colorId, selectedCountryId: null };
     case 'TOGGLE_CARRY_LABELS':
       return { ...state, carryOverLabels: !state.carryOverLabels };
-    case 'SET_VIEWPORT':
-      return { ...state, viewport: action.viewport };
+    case 'SET_DISPLAY_SETTINGS':
+      return { ...state, displaySettings: action.displaySettings };
     case 'SET_SELECTED_COUNTRY':
       return {
         ...state,
@@ -180,7 +181,7 @@ interface ProjectContextValue {
   setTool: (tool: ToolMode) => void;
   setActiveColor: (colorId: string) => void;
   toggleCarryLabels: () => void;
-  setViewport: (viewport: ViewportState) => void;
+  updateDisplaySettings: (settings: ProjectDisplaySettings) => void;
   addTerritoryRegion: (region: PolygonRing) => Promise<void>;
   claimAnchor: (x: number, y: number) => Promise<void>;
   removeTerritoryVertex: (countryId: string, ringIndex: number, vertexIndex: number) => Promise<void>;
@@ -445,7 +446,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       await runMutation(() =>
         api.setTimelineIndex(toProjectBody(stateRef.current), index),
       );
-      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
     },
     [runMutation],
   );
@@ -464,7 +464,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       await runMutation(() =>
         api.deleteTimelineEntry(toProjectBody(stateRef.current), index),
       );
-      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
     },
     [runMutation],
   );
@@ -489,8 +488,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'TOGGLE_CARRY_LABELS' });
   }, []);
 
-  const setViewport = useCallback((viewport: ViewportState) => {
-    dispatch({ type: 'SET_VIEWPORT', viewport });
+  const updateDisplaySettings = useCallback((displaySettings: ProjectDisplaySettings) => {
+    dispatch({ type: 'SET_DISPLAY_SETTINGS', displaySettings });
   }, []);
 
   const addTerritoryRegion = useCallback(
@@ -885,7 +884,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           fileRegistry: registry,
         },
       });
-      dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
     },
     [applyMutation, clearHistory],
   );
@@ -909,7 +907,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             knownFilenames: knownFilenames(),
           }),
         );
-        dispatch({ type: 'SET_VIEWPORT', viewport: { scale: 1, x: 0, y: 0 } });
         return true;
       } catch {
         return false;
@@ -950,7 +947,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setTool,
       setActiveColor,
       toggleCarryLabels,
-      setViewport,
+      updateDisplaySettings,
       addTerritoryRegion,
       claimAnchor,
       removeTerritoryVertex,
@@ -998,7 +995,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setTool,
       setActiveColor,
       toggleCarryLabels,
-      setViewport,
+      updateDisplaySettings,
       addTerritoryRegion,
       claimAnchor,
       removeTerritoryVertex,

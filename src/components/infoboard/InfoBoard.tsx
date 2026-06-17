@@ -4,6 +4,7 @@ import { useProject } from '../../context/ProjectContext';
 import type { FactionStat } from '../../types/project';
 import { FactionManager } from './FactionManager';
 import { MarkersPanel } from './MarkersPanel';
+import { DisplaySettingsPanel } from '../settings/DisplaySettingsPanel';
 
 export function InfoBoard() {
   const { state, currentFrame, updateFrameInfo } = useProject();
@@ -163,6 +164,10 @@ export function InfoBoard() {
                 })}
               </ul>
             </section>
+
+            <div className="shrink-0">
+              <DisplaySettingsPanel />
+            </div>
 
             <div className="shrink-0">
               <FactionManager />

@@ -1,4 +1,5 @@
 import { Line, Shape } from 'react-konva';
+import { memo, useRef, type RefObject } from 'react';
 import type Konva from 'konva';
 import type { CountryTerritory } from '../../types/project';
 import { TERRITORY_FILL_OPACITY, TERRITORY_OUTLINE_WIDTH } from '../../types/project';
@@ -30,25 +31,25 @@ function fillRings(
   }
 }
 
-export function CountryTerritoryShape({
-  country,
-  isSelected,
-  onSelect,
-  outlineWidth = TERRITORY_OUTLINE_WIDTH,
-}: CountryTerritoryShapeProps) {
-  const outline = adjustOutlineColor(country.color, -32);
-  const strokeWidth = isSelected ? outlineWidth + 1 : outlineWidth;
-
-  return (
-    <>
+/** Fill hit target — does not depend on selection or border width. */
+const CountryTerritoryFill = memo(
+  function CountryTerritoryFill({
+    country,
+    onSelectRef,
+  }: {
+    country: CountryTerritory;
+    onSelectRef: RefObject<() => void>;
+  }) {
+    return (
       <Shape
         fill={country.color}
         fillRule="evenodd"
         opacity={TERRITORY_FILL_OPACITY}
         listening
+        perfectDrawEnabled={false}
         onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
           if (e.evt.button !== 0) return;
-          onSelect();
+          onSelectRef.current?.();
         }}
         sceneFunc={(context, shape) => {
           context.beginPath();
@@ -56,19 +57,76 @@ export function CountryTerritoryShape({
           context.fillStrokeShape(shape);
         }}
       />
-      {country.regions.map((ring, ri) => (
-        <Line
-          key={`${country.id}-outline-${ri}`}
-          points={ringToFlatPoints(ring)}
-          closed
-          stroke={outline}
+    );
+  },
+  (prev, next) => prev.country === next.country,
+);
+
+/** Outline rings — only re-render when selection highlight or width changes. */
+const CountryTerritoryOutline = memo(
+  function CountryTerritoryOutline({
+    countryId,
+    regions,
+    color,
+    strokeWidth,
+  }: {
+    countryId: string;
+    regions: CountryTerritory['regions'];
+    color: string;
+    strokeWidth: number;
+  }) {
+    const outline = adjustOutlineColor(color, -32);
+    return (
+      <>
+        {regions.map((ring, ri) => (
+          <Line
+            key={`${countryId}-outline-${ri}`}
+            points={ringToFlatPoints(ring)}
+            closed
+            stroke={outline}
+            strokeWidth={strokeWidth}
+            lineJoin="round"
+            lineCap="round"
+            fillEnabled={false}
+            listening={false}
+            perfectDrawEnabled={false}
+          />
+        ))}
+      </>
+    );
+  },
+  (prev, next) =>
+    prev.countryId === next.countryId &&
+    prev.regions === next.regions &&
+    prev.color === next.color &&
+    prev.strokeWidth === next.strokeWidth,
+);
+
+export const CountryTerritoryShape = memo(
+  function CountryTerritoryShape({
+    country,
+    isSelected,
+    onSelect,
+    outlineWidth = TERRITORY_OUTLINE_WIDTH,
+  }: CountryTerritoryShapeProps) {
+    const onSelectRef = useRef(onSelect);
+    onSelectRef.current = onSelect;
+    const strokeWidth = isSelected ? outlineWidth + 1 : outlineWidth;
+
+    return (
+      <>
+        <CountryTerritoryFill country={country} onSelectRef={onSelectRef} />
+        <CountryTerritoryOutline
+          countryId={country.id}
+          regions={country.regions}
+          color={country.color}
           strokeWidth={strokeWidth}
-          lineJoin="round"
-          lineCap="round"
-          fillEnabled={false}
-          listening={false}
         />
-      ))}
-    </>
-  );
-}
+      </>
+    );
+  },
+  (prev, next) =>
+    prev.country === next.country &&
+    prev.isSelected === next.isSelected &&
+    prev.outlineWidth === next.outlineWidth,
+);

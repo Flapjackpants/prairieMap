@@ -147,6 +147,7 @@ export function useVideoExport() {
             divisions,
             dateTitle: resolved.frameData.info.dateTitle,
             eventLog: resolved.frameData.info.description,
+            displaySettings: state.displaySettings,
           };
         };
 

@@ -1,4 +1,5 @@
-import { Circle, Group, Line } from 'react-konva';
+import { Circle, Group } from 'react-konva';
+import { memo } from 'react';
 import type { CountryTerritory } from '../../types/project';
 import {
   ANCHOR_HIT_SCREEN_PX,
@@ -6,7 +7,6 @@ import {
   mapRadiusForScreenPx,
   mapStrokeWidthForScreenPx,
 } from '../../utils/mapZoom';
-import type { SnapVertex } from '../../utils/vertexSnap';
 import { CountryTerritoryShape } from './CountryTerritoryShape';
 import { CurvedRegionLabels } from './CurvedRegionLabels';
 
@@ -19,12 +19,7 @@ interface TerritoryLayerProps {
   showLabels?: boolean;
   showAnchorHandles: boolean;
   outlineWidth?: number;
-  draftPoints: { x: number; y: number }[];
-  draftColor: string;
-  cursorPoint: { x: number; y: number } | null;
-  snapTarget: SnapVertex | null;
   onSelectCountry: (id: string) => void;
-  onRemoveDraftAnchor: (index: number) => void;
   onClaimAnchor: (x: number, y: number) => void;
   onRemoveTerritoryVertex: (countryId: string, ringIndex: number, vertexIndex: number) => void;
   onMoveTerritoryVertex: (
@@ -36,7 +31,7 @@ interface TerritoryLayerProps {
   ) => void;
 }
 
-export function TerritoryLayer({
+export const TerritoryLayer = memo(function TerritoryLayer({
   countries,
   selectedCountryId,
   activeFactionId,
@@ -45,12 +40,7 @@ export function TerritoryLayer({
   showLabels = true,
   showAnchorHandles,
   outlineWidth,
-  draftPoints,
-  draftColor,
-  cursorPoint,
-  snapTarget,
   onSelectCountry,
-  onRemoveDraftAnchor,
   onClaimAnchor,
   onRemoveTerritoryVertex,
   onMoveTerritoryVertex,
@@ -60,11 +50,6 @@ export function TerritoryLayer({
   const anchorStroke = mapStrokeWidthForScreenPx(2, scale);
   const anchorHit = (mapRadius: number) =>
     hitStrokeWidthForScreenPx(ANCHOR_HIT_SCREEN_PX, mapRadius, scale);
-
-  const previewPoints =
-    cursorPoint && draftPoints.length > 0
-      ? [...draftPoints, cursorPoint]
-      : draftPoints;
 
   return (
     <>
@@ -130,53 +115,6 @@ export function TerritoryLayer({
           ),
         )}
 
-      {snapTarget && (
-        <Circle
-          x={snapTarget.x}
-          y={snapTarget.y}
-          radius={anchorRadius(8)}
-          stroke="#00e5ff"
-          strokeWidth={anchorStroke}
-          fill="rgba(0,229,255,0.25)"
-          listening={false}
-        />
-      )}
-
-      {previewPoints.length > 0 && (
-        <>
-          <Line
-            points={previewPoints.flatMap((p) => [p.x, p.y])}
-            stroke={draftColor}
-            strokeWidth={2}
-            dash={[8, 6]}
-            closed={false}
-            listening={false}
-          />
-          {draftPoints.map((p, i) => {
-            const radius = anchorRadius(i === 0 ? 7 : 5);
-            return (
-            <Circle
-              key={`draft-${i}`}
-              x={p.x}
-              y={p.y}
-              radius={radius}
-              fill={i === 0 ? draftColor : '#121214'}
-              stroke={
-                snapTarget?.source === 'draft' && snapTarget.index === i
-                  ? '#00e5ff'
-                  : draftColor
-              }
-              strokeWidth={anchorStroke}
-              hitStrokeWidth={anchorHit(radius)}
-              onClick={(e) => {
-                e.cancelBubble = true;
-                if (e.evt.altKey) onRemoveDraftAnchor(i);
-              }}
-            />
-            );
-          })}
-        </>
-      )}
     </>
   );
-}
+});

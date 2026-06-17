@@ -1,5 +1,8 @@
 export type ToolMode = 'pan' | 'areaSelect' | 'select' | 'city' | 'division';
 
+export type { ProjectDisplaySettings } from './displaySettings';
+import type { ProjectDisplaySettings } from './displaySettings';
+
 export type MarkerKind = 'city' | 'division';
 
 export interface CityMarker {
@@ -177,8 +180,8 @@ export interface ProjectState {
   activeColorId: string;
   tool: ToolMode;
   carryOverLabels: boolean;
+  displaySettings: ProjectDisplaySettings;
   visitedTimelineIds: string[];
-  viewport: ViewportState;
   selectedCountryId: string | null;
   selectedMarkerId: string | null;
   selectedMarkerKind: MarkerKind | null;
@@ -190,6 +193,7 @@ export interface ProjectExportV2 {
   exportedAt: string;
   palette: PaletteColor[];
   carryOverLabels: boolean;
+  displaySettings?: ProjectDisplaySettings;
   assets: Record<
     string,
     {

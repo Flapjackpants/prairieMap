@@ -1,8 +1,8 @@
 import { Circle, Group, Image as KonvaImage, Rect, Text } from 'react-konva';
+import { memo } from 'react';
 import type Konva from 'konva';
 import type { CityMarker, DivisionMarker, MarkerKind } from '../../types/project';
 import { DEFAULT_CITY_MARKER_SIZE } from '../../types/project';
-import { useMarkerSourceImage } from '../../hooks/useMarkerSourceImage';
 
 const LABEL_FONT = 'JetBrains Mono, monospace';
 
@@ -37,8 +37,7 @@ function DivisionMarkerNode({
   onSelect: () => void;
   onMove: (x: number, y: number) => void;
 }) {
-  const hookImage = useMarkerSourceImage(preloadedImage ? null : marker.sourceFilename);
-  const image = preloadedImage ?? hookImage;
+  const image = preloadedImage;
   const half = marker.size / 2;
 
   return (
@@ -95,7 +94,7 @@ function DivisionMarkerNode({
   );
 }
 
-export function MarkerLayer({
+export const MarkerLayer = memo(function MarkerLayer({
   cities = [],
   divisions = [],
   selectedMarkerId,
@@ -170,4 +169,4 @@ export function MarkerLayer({
         ))}
     </>
   );
-}
+});

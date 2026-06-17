@@ -33,7 +33,7 @@ export function FrameSidebar() {
   useEffect(() => {
     if (timeline.length === 0) return;
     virtualizer.scrollToIndex(currentTimelineIndex, { align: 'auto' });
-  }, [currentTimelineIndex, timeline.length, virtualizer]);
+  }, [currentTimelineIndex, timeline.length]);
 
   const openDuplicateModal = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();

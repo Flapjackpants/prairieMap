@@ -113,6 +113,12 @@ class FrameDuplicateOptions(BaseModel):
     duplicateInfoBoard: bool = True
 
 
+class ProjectDisplaySettings(BaseModel):
+    cityTextSize: float = 11
+    territoryBorderWidth: float = 1.5
+    cityMarkerStrokeWidth: float = 1.5
+
+
 class ProjectBody(BaseModel):
     """Server-persisted project (no file blobs)."""
     projectName: str = "Untitled Campaign"
@@ -122,6 +128,7 @@ class ProjectBody(BaseModel):
     carryOverLabels: bool = True
     currentTimelineIndex: int = 0
     visitedTimelineIds: list[str] = Field(default_factory=list)
+    displaySettings: ProjectDisplaySettings = Field(default_factory=ProjectDisplaySettings)
 
 
 class ProjectMeta(BaseModel):
@@ -248,6 +255,7 @@ class ProjectExportV2(BaseModel):
     exportedAt: str
     palette: list[PaletteColor]
     carryOverLabels: bool
+    displaySettings: ProjectDisplaySettings = Field(default_factory=ProjectDisplaySettings)
     assets: dict[str, list[dict[str, Any]]]
     timeline: list[TimelineEntry]
 

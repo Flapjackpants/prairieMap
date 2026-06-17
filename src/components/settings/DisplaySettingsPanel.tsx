@@ -1,101 +1,111 @@
-import { RotateCcw, Settings2 } from 'lucide-react';
-import { useState } from 'react';
-import { useLocalDisplaySettings } from '../../context/LocalDisplaySettingsContext';
-import { LOCAL_DISPLAY_LIMITS } from '../../types/localDisplaySettings';
+import { RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useProject } from '../../context/ProjectContext';
+import {
+  clampDisplaySettings,
+  DISPLAY_SETTINGS_LIMITS,
+  type ProjectDisplaySettings,
+} from '../../types/displaySettings';
 
-function SliderRow({
+function NumberRow({
   label,
   value,
   min,
   max,
   step,
-  onChange,
+  onCommit,
 }: {
   label: string;
   value: number;
   min: number;
   max: number;
   step: number;
-  onChange: (value: number) => void;
+  onCommit: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commit = () => {
+    const n = Number(draft);
+    if (!Number.isFinite(n)) {
+      setDraft(String(value));
+      return;
+    }
+    onCommit(Math.min(max, Math.max(min, n)));
+  };
+
   return (
     <label className="flex flex-col gap-1 font-mono text-[9px] tracking-widest text-text-muted uppercase">
-      <span className="flex items-center justify-between">
-        {label}
-        <span className="tabular-nums text-accent-cyan">{value}</span>
-      </span>
+      {label}
       <input
-        type="range"
+        type="number"
         min={min}
         max={max}
         step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full accent-accent-cyan"
+        className="w-full border border-border bg-surface px-2 py-1 font-mono text-xs text-text-primary tabular-nums"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.currentTarget.blur();
+          }
+        }}
       />
     </label>
   );
 }
 
 export function DisplaySettingsPanel() {
-  const { settings, updateSettings, resetSettings } = useLocalDisplaySettings();
-  const [open, setOpen] = useState(false);
+  const { state, updateDisplaySettings } = useProject();
+  const settings = state.displaySettings;
+
+  const commit = (patch: Partial<ProjectDisplaySettings>) => {
+    updateDisplaySettings(clampDisplaySettings({ ...settings, ...patch }));
+  };
 
   return (
-    <div className="absolute right-3 bottom-3 z-20 flex flex-col items-end gap-1">
-      {open && (
-        <div className="panel w-56 shadow-xl">
-          <div className="panel-header">
-            <Settings2 className="h-3.5 w-3.5 text-accent-cyan" />
-            <span className="panel-title">Display</span>
-          </div>
-          <div className="panel-inset flex flex-col gap-3 p-3">
-            <p className="font-mono text-[8px] leading-snug tracking-wide text-text-muted uppercase">
-              Display prefs (not saved to project)
-            </p>
-            <SliderRow
-              label="City text size"
-              value={settings.cityTextSize}
-              min={LOCAL_DISPLAY_LIMITS.cityTextSize.min}
-              max={LOCAL_DISPLAY_LIMITS.cityTextSize.max}
-              step={1}
-              onChange={(cityTextSize) => updateSettings({ cityTextSize })}
-            />
-            <SliderRow
-              label="Territory border"
-              value={settings.territoryBorderWidth}
-              min={LOCAL_DISPLAY_LIMITS.territoryBorderWidth.min}
-              max={LOCAL_DISPLAY_LIMITS.territoryBorderWidth.max}
-              step={0.5}
-              onChange={(territoryBorderWidth) => updateSettings({ territoryBorderWidth })}
-            />
-            <SliderRow
-              label="City marker border"
-              value={settings.cityMarkerStrokeWidth}
-              min={LOCAL_DISPLAY_LIMITS.cityMarkerStrokeWidth.min}
-              max={LOCAL_DISPLAY_LIMITS.cityMarkerStrokeWidth.max}
-              step={0.5}
-              onChange={(cityMarkerStrokeWidth) => updateSettings({ cityMarkerStrokeWidth })}
-            />
-            <button
-              type="button"
-              className="btn-secondary flex items-center justify-center gap-1.5 py-1.5 font-mono text-[9px] tracking-wider uppercase"
-              onClick={resetSettings}
-            >
-              <RotateCcw className="h-3 w-3" />
-              Reset defaults
-            </button>
-          </div>
-        </div>
-      )}
-      <button
-        type="button"
-        title="Display settings (local only)"
-        className={`btn-icon h-8 w-8 ${open ? 'btn-icon-active' : ''}`}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Settings2 className="h-3.5 w-3.5" />
-      </button>
-    </div>
+    <section className="border border-border/60 bg-surface/50">
+      <div className="border-b border-border/60 px-2 py-1.5 font-mono text-[9px] tracking-widest text-text-muted uppercase">
+        Map display
+      </div>
+      <div className="flex flex-col gap-2 px-2 py-2">
+        <NumberRow
+          label="City text size"
+          value={settings.cityTextSize}
+          min={DISPLAY_SETTINGS_LIMITS.cityTextSize.min}
+          max={DISPLAY_SETTINGS_LIMITS.cityTextSize.max}
+          step={1}
+          onCommit={(cityTextSize) => commit({ cityTextSize })}
+        />
+        <NumberRow
+          label="Territory border"
+          value={settings.territoryBorderWidth}
+          min={DISPLAY_SETTINGS_LIMITS.territoryBorderWidth.min}
+          max={DISPLAY_SETTINGS_LIMITS.territoryBorderWidth.max}
+          step={0.5}
+          onCommit={(territoryBorderWidth) => commit({ territoryBorderWidth })}
+        />
+        <NumberRow
+          label="City marker border"
+          value={settings.cityMarkerStrokeWidth}
+          min={DISPLAY_SETTINGS_LIMITS.cityMarkerStrokeWidth.min}
+          max={DISPLAY_SETTINGS_LIMITS.cityMarkerStrokeWidth.max}
+          step={0.5}
+          onCommit={(cityMarkerStrokeWidth) => commit({ cityMarkerStrokeWidth })}
+        />
+        <button
+          type="button"
+          className="btn-secondary flex items-center justify-center gap-1.5 py-1 font-mono text-[9px] tracking-wider uppercase"
+          onClick={() => updateDisplaySettings(clampDisplaySettings({}))}
+        >
+          <RotateCcw className="h-3 w-3" />
+          Reset defaults
+        </button>
+      </div>
+    </section>
   );
 }
