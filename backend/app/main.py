@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import geometry, projects, timeline, video
+from app.api import geometry, minecraft, projects, timeline, video
 
 app = FastAPI(title="PrairieMap API", version="1.0.0")
 
@@ -19,6 +19,7 @@ app.include_router(projects.router, prefix="/api")
 app.include_router(geometry.router, prefix="/api")
 app.include_router(timeline.router, prefix="/api")
 app.include_router(video.router, prefix="/api")
+app.include_router(minecraft.router, prefix="/api")
 
 
 @app.get("/api/health")

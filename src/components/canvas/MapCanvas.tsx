@@ -62,6 +62,7 @@ export function MapCanvas() {
     updateCityMarker,
     updateDivisionMarker,
     setFileCanvasSize,
+    mapClickHandler,
   } = useProject();
   const displaySettings = state.displaySettings;
   const [viewport, setViewport] = useState<ViewportState>(DEFAULT_VIEWPORT);
@@ -375,6 +376,11 @@ export function MapCanvas() {
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const raw = getPointerOnImage();
     if (!raw) return;
+
+    if (mapClickHandler) {
+      mapClickHandler(raw.x, raw.y);
+      return;
+    }
 
     if (isPlacementTool) return;
 

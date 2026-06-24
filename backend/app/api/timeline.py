@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from app.models.project import (
+    AppendRecordedFrameRequest,
     DeleteTimelineEntryRequest,
     DuplicateFrameRequest,
     InitFilenamesRequest,
@@ -44,6 +45,16 @@ def duplicate_frame(req: DuplicateFrameRequest) -> ProjectMutationResponse:
             status_code=400,
             detail="Cannot duplicate: no next map available when duplicateMapImage is false",
         )
+    return ProjectMutationResponse(project=result)
+
+
+@router.post("/append-recorded-frame", response_model=ProjectMutationResponse)
+def append_recorded_frame(req: AppendRecordedFrameRequest) -> ProjectMutationResponse:
+    result = project_service.append_recorded_frame(
+        req.project, req.sourceIndex, req.divisions, req.knownFilenames
+    )
+    if result is None:
+        raise HTTPException(status_code=400, detail="Cannot append recorded frame")
     return ProjectMutationResponse(project=result)
 
 

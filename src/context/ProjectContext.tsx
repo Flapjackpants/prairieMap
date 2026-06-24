@@ -217,6 +217,9 @@ interface ProjectContextValue {
   exportProject: () => ProjectExport;
   importProject: (data: ProjectExport, files: File[]) => Promise<void>;
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
+  appendRecordedFrame: (sourceIndex: number, divisions: DivisionMarker[]) => Promise<number>;
+  mapClickHandler: ((x: number, y: number) => void) | null;
+  setMapClickHandler: (handler: ((x: number, y: number) => void) | null) => void;
   setFileCanvasSize: (filename: string, width: number, height: number) => void;
   saveToServer: () => Promise<void>;
   undo: () => Promise<void>;
@@ -260,6 +263,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const restoringRef = useRef(false);
   const markerClipboardRef = useRef<MarkerClipboard | null>(null);
   const [hasMarkerClipboard, setHasMarkerClipboard] = useState(false);
+  const [mapClickHandler, setMapClickHandler] = useState<
+    ((x: number, y: number) => void) | null
+  >(null);
 
   const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
 
@@ -320,6 +326,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           bumpHistory();
         }
         applyMutation(res);
+        return res;
       } catch (e) {
         const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : 'API error';
         setApiError(msg);
@@ -921,6 +928,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [runMutation, knownFilenames],
   );
 
+  const appendRecordedFrame = useCallback(
+    async (sourceIndex: number, divisions: DivisionMarker[]): Promise<number> => {
+      const res = await runMutation(() =>
+        api.appendRecordedFrame({
+          project: toProjectBody(stateRef.current),
+          sourceIndex,
+          divisions,
+          knownFilenames: knownFilenames(),
+        }),
+      );
+      return res.project.currentTimelineIndex;
+    },
+    [runMutation, knownFilenames],
+  );
+
   const setFileCanvasSize = useCallback((filename: string, width: number, height: number) => {
     dispatch({ type: 'SET_FILE_CANVAS_SIZE', filename, width, height });
   }, []);
@@ -977,6 +999,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       exportProject,
       importProject,
       duplicateFrame,
+      appendRecordedFrame,
+      mapClickHandler,
+      setMapClickHandler,
       setFileCanvasSize,
       saveToServer,
       undo,
@@ -1025,6 +1050,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       exportProject,
       importProject,
       duplicateFrame,
+      appendRecordedFrame,
+      mapClickHandler,
+      setMapClickHandler,
       setFileCanvasSize,
       saveToServer,
       undo,

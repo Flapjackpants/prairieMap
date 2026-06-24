@@ -202,6 +202,18 @@ export async function duplicateFrame(params: {
   });
 }
 
+export async function appendRecordedFrame(params: {
+  project: ProjectBody;
+  sourceIndex: number;
+  divisions: import('../types/project').DivisionMarker[];
+  knownFilenames: string[];
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/timeline/append-recorded-frame', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function reconcileFilenames(
   project: ProjectBody,
   filenames: string[],

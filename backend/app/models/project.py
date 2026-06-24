@@ -166,6 +166,13 @@ class DuplicateFrameRequest(BaseModel):
     knownFilenames: list[str] = Field(default_factory=list)
 
 
+class AppendRecordedFrameRequest(BaseModel):
+    project: ProjectBody
+    sourceIndex: int
+    divisions: list[DivisionMarker]
+    knownFilenames: list[str] = Field(default_factory=list)
+
+
 class ReconcileRequest(BaseModel):
     project: ProjectBody
     filenames: list[str]

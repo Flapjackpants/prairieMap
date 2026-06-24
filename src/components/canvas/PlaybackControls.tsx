@@ -3,6 +3,7 @@ import {
   Camera,
   ChevronFirst,
   ChevronLast,
+  Circle,
   Clapperboard,
   Pause,
   Play,
@@ -17,6 +18,7 @@ import { ExportFrameStage } from './ExportFrameStage';
 import { ExportVideoModal } from './ExportVideoModal';
 import { GenerateRenderModal } from './GenerateRenderModal';
 import { MapRenderStage } from './MapRenderStage';
+import { MinecraftRecordModal } from './MinecraftRecordModal';
 
 export function PlaybackControls() {
   const { state, setTimelineIndex, nextFrame, prevFrame, apiReady } = useProject();
@@ -26,6 +28,7 @@ export function PlaybackControls() {
   const frameRender = useFrameRender();
   const [showExportModal, setShowExportModal] = useState(false);
   const [showRenderModal, setShowRenderModal] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
 
   const hasFrames = timeline.length > 0;
 
@@ -78,6 +81,10 @@ export function PlaybackControls() {
           }}
           onClose={() => setShowRenderModal(false)}
         />
+      )}
+
+      {showRecordModal && (
+        <MinecraftRecordModal onClose={() => setShowRecordModal(false)} />
       )}
 
       <div className="shrink-0 border-t border-metal-shadow bg-surface-overlay px-2 py-2">
@@ -139,6 +146,19 @@ export function PlaybackControls() {
               title="Last frame"
             >
               <ChevronLast className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
+              className={`btn-icon flex h-8 shrink-0 items-center gap-1 px-2 ${
+                hasFrames && apiReady ? 'text-accent-crimson' : ''
+              }`}
+              disabled={!hasFrames || !apiReady}
+              onClick={() => setShowRecordModal(true)}
+              title="Record player positions from Minecraft API"
+            >
+              <Circle className="h-4 w-4 shrink-0" />
+              <span className="font-mono text-[8px] font-bold tracking-wider">REC</span>
             </button>
 
             <button

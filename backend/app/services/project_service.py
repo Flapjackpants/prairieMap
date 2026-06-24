@@ -462,6 +462,36 @@ def duplicate_frame(
     )
 
 
+def append_recorded_frame(
+    project: ProjectBody,
+    source_index: int,
+    divisions: list[DivisionMarker],
+    known_filenames: list[str],
+) -> ProjectBody | None:
+    options = FrameDuplicateOptions(
+        duplicateMapImage=True,
+        duplicateAnnotations=True,
+        duplicateInfoBoard=True,
+    )
+    duplicated = duplicate_frame(project, source_index, options, known_filenames)
+    if duplicated is None:
+        return None
+
+    new_index = duplicated.currentTimelineIndex
+    if new_index < 0 or new_index >= len(duplicated.timeline):
+        return None
+
+    entry = duplicated.timeline[new_index]
+    assets = {k: list(v) for k, v in duplicated.assets.items()}
+    frame_state = get_asset_state(assets, entry.filename, entry.copyIndex)
+    updated_annotations = frame_state.annotations.model_copy(update={"divisions": divisions})
+    assets[entry.filename][entry.copyIndex] = frame_state.model_copy(
+        update={"annotations": updated_annotations}
+    )
+
+    return duplicated.model_copy(update={"assets": assets})
+
+
 def reconcile_filenames(project: ProjectBody, filenames: list[str]) -> ProjectBody:
     assets = {k: list(v) for k, v in project.assets.items()}
     timeline = [t.model_copy() for t in project.timeline]
