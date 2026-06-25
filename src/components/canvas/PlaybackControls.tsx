@@ -19,16 +19,17 @@ import { ExportVideoModal } from './ExportVideoModal';
 import { GenerateRenderModal } from './GenerateRenderModal';
 import { MapRenderStage } from './MapRenderStage';
 import { MinecraftRecordModal } from './MinecraftRecordModal';
+import { useMinecraftRecording } from '../../context/MinecraftRecordingContext';
 
 export function PlaybackControls() {
   const { state, setTimelineIndex, nextFrame, prevFrame, apiReady } = useProject();
+  const { openModal } = useMinecraftRecording();
   const { timeline, currentTimelineIndex } = state;
   const { isPlaying, canPlay, togglePlay, goToStart, goToEnd } = usePlayback();
   const video = useVideoExport();
   const frameRender = useFrameRender();
   const [showExportModal, setShowExportModal] = useState(false);
   const [showRenderModal, setShowRenderModal] = useState(false);
-  const [showRecordModal, setShowRecordModal] = useState(false);
 
   const hasFrames = timeline.length > 0;
 
@@ -83,9 +84,7 @@ export function PlaybackControls() {
         />
       )}
 
-      {showRecordModal && (
-        <MinecraftRecordModal onClose={() => setShowRecordModal(false)} />
-      )}
+      <MinecraftRecordModal />
 
       <div className="shrink-0 border-t border-metal-shadow bg-surface-overlay px-2 py-2">
         <div className="flex items-center gap-2 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-0.5">
@@ -154,8 +153,8 @@ export function PlaybackControls() {
                 hasFrames && apiReady ? 'text-accent-crimson' : ''
               }`}
               disabled={!hasFrames || !apiReady}
-              onClick={() => setShowRecordModal(true)}
-              title="Record player positions from Minecraft API"
+              onClick={() => openModal()}
+              title="Capture Minecraft player positions to JSON"
             >
               <Circle className="h-4 w-4 shrink-0" />
               <span className="font-mono text-[8px] font-bold tracking-wider">REC</span>

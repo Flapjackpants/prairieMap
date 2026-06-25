@@ -20,6 +20,8 @@ import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 import { CityNameModal } from './CityNameModal';
 import { DivisionCropModal } from './DivisionCropModal';
+import { MinecraftCalibrationLayer } from './MinecraftCalibrationLayer';
+import { useMinecraftRecordingOptional } from '../../context/MinecraftRecordingContext';
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
@@ -62,8 +64,9 @@ export function MapCanvas() {
     updateCityMarker,
     updateDivisionMarker,
     setFileCanvasSize,
-    mapClickHandler,
   } = useProject();
+  const minecraftRec = useMinecraftRecordingOptional();
+  const mapPickTarget = minecraftRec?.awaitingMapClick ?? null;
   const displaySettings = state.displaySettings;
   const [viewport, setViewport] = useState<ViewportState>(DEFAULT_VIEWPORT);
   const liveViewportRef = useRef<ViewportState>(DEFAULT_VIEWPORT);
@@ -125,18 +128,20 @@ export function MapCanvas() {
   const selectedCountry = countries.find((c) => c.id === selectedCountryId);
 
   /** Konva left-drag pan (PAN tool or Space). Middle-click uses manual viewport updates. */
-  const isKonvaPanDrag = tool === 'pan' || spaceHeld;
+  const isMapPickMode = mapPickTarget !== null;
+  const isKonvaPanDrag = (tool === 'pan' || spaceHeld) && !isMapPickMode;
   const isPointerPanning = isKonvaPanDrag || middlePanHeld;
-  const isAreaSelect = tool === 'areaSelect' && !isPointerPanning;
+  const isAreaSelect = tool === 'areaSelect' && !isPointerPanning && !isMapPickMode;
   const draftColor = isAreaSelect
     ? activeColor?.hex ?? '#00e5ff'
     : selectedCountry?.color ?? activeColor?.hex ?? '#00e5ff';
   const isSelect = tool === 'select' && !isPointerPanning;
-  const isCityTool = tool === 'city' && !isPointerPanning;
-  const isDivisionTool = tool === 'division' && !isPointerPanning;
+  const isCityTool = tool === 'city' && !isPointerPanning && !isMapPickMode;
+  const isDivisionTool = tool === 'division' && !isPointerPanning && !isMapPickMode;
   const isPlacementTool = isCityTool || isDivisionTool;
-  const isMarkerInteractive = (isSelect || isCityTool || isDivisionTool) && !isPointerPanning;
-  const showAnchorHandles = (isAreaSelect || isSelect) && !isPointerPanning;
+  const isMarkerInteractive =
+    (isSelect || isCityTool || isDivisionTool) && !isPointerPanning && !isMapPickMode;
+  const showAnchorHandles = (isAreaSelect || isSelect) && !isPointerPanning && !isMapPickMode;
   const cities = currentFrame?.frameData.annotations.cities ?? [];
   const divisions = currentFrame?.frameData.annotations.divisions ?? [];
   const snapThreshold = SNAP_THRESHOLD_PX / Math.max(viewport.scale, 0.15);
@@ -341,6 +346,7 @@ export function MapCanvas() {
 
   const snapMoveRafRef = useRef<number | null>(null);
   const handleStageMouseMove = useCallback(() => {
+    if (isMapPickMode) return;
     if (!isAreaSelect) {
       draftOverlayRef.current?.updatePreview(null, null, viewportRef.current.scale);
       if (containerRef.current) containerRef.current.style.cursor = '';
@@ -357,7 +363,13 @@ export function MapCanvas() {
         containerRef.current.style.cursor = snap ? 'cell' : 'crosshair';
       }
     });
-  }, [isAreaSelect, getPointerOnImage, resolveSnap]);
+  }, [isAreaSelect, isMapPickMode, getPointerOnImage, resolveSnap]);
+
+  const handleMapPickClick = useCallback(() => {
+    const raw = getPointerOnImage();
+    if (!raw || !mapPickTarget || !minecraftRec) return;
+    minecraftRec.setMapPoint(mapPickTarget, raw.x, raw.y);
+  }, [getPointerOnImage, mapPickTarget, minecraftRec]);
 
   const handlePlacementClick = useCallback(() => {
     const raw = getPointerOnImage();
@@ -377,8 +389,8 @@ export function MapCanvas() {
     const raw = getPointerOnImage();
     if (!raw) return;
 
-    if (mapClickHandler) {
-      mapClickHandler(raw.x, raw.y);
+    if (mapPickTarget && minecraftRec) {
+      minecraftRec.setMapPoint(mapPickTarget, raw.x, raw.y);
       return;
     }
 
@@ -511,17 +523,19 @@ export function MapCanvas() {
     if (currentFrame && !image) fitBlankToView();
   }, [currentFrame?.entry.id, image, fitBlankToView]);
 
-  const cursor = middlePanHeld
-    ? 'grabbing'
-    : isKonvaPanDrag
-      ? 'grab'
-      : isAreaSelect
-      ? 'crosshair'
-      : tool === 'select'
-        ? 'pointer'
-        : isCityTool || isDivisionTool
+  const cursor = isMapPickMode
+    ? 'crosshair'
+    : middlePanHeld
+      ? 'grabbing'
+      : isKonvaPanDrag
+        ? 'grab'
+        : isAreaSelect
           ? 'crosshair'
-          : 'default';
+          : tool === 'select'
+            ? 'pointer'
+            : isCityTool || isDivisionTool
+              ? 'crosshair'
+              : 'default';
 
   return (
     <main className="panel flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
@@ -652,6 +666,29 @@ export function MapCanvas() {
                     }}
                   />
                 )}
+                {minecraftRec && (
+                  <MinecraftCalibrationLayer
+                    pointA={
+                      minecraftRec.calibrationA.mapX !== undefined &&
+                      minecraftRec.calibrationA.mapY !== undefined
+                        ? {
+                            mapX: minecraftRec.calibrationA.mapX,
+                            mapY: minecraftRec.calibrationA.mapY,
+                          }
+                        : null
+                    }
+                    pointB={
+                      minecraftRec.calibrationB.mapX !== undefined &&
+                      minecraftRec.calibrationB.mapY !== undefined
+                        ? {
+                            mapX: minecraftRec.calibrationB.mapX,
+                            mapY: minecraftRec.calibrationB.mapY,
+                          }
+                        : null
+                    }
+                    viewportScale={viewport.scale}
+                  />
+                )}
                 <MarkerLayer
                   showCities={false}
                   showDivisions
@@ -709,6 +746,22 @@ export function MapCanvas() {
                   />
                 )}
               </Layer>
+
+              {isMapPickMode && (
+                <Layer>
+                  <Rect
+                    width={canvasWidth}
+                    height={canvasHeight}
+                    fill="rgba(0,229,255,0.04)"
+                    listening
+                    onClick={(e: Konva.KonvaEventObject<MouseEvent>) => {
+                      if (e.evt.button !== 0) return;
+                      e.cancelBubble = true;
+                      handleMapPickClick();
+                    }}
+                  />
+                </Layer>
+              )}
             </Stage>
           </>
         )}

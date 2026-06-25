@@ -83,3 +83,22 @@ export interface CalibrationPair {
   mapX: number;
   mapY: number;
 }
+
+export const MINECRAFT_RECORDING_SESSION_VERSION = 1;
+
+/** Sidecar file: raw API snapshots + calibration for deferred division import. */
+export interface MinecraftRecordingSession {
+  version: typeof MINECRAFT_RECORDING_SESSION_VERSION;
+  recordedAt: string;
+  apiTarget: MinecraftApiTarget;
+  apiPort: number;
+  anchorUuid: string;
+  anchorWorld: string;
+  calibrationA: CalibrationPair;
+  calibrationB: CalibrationPair;
+  divisionTemplate: DivisionTemplate;
+  /** Timeline index when recording started (hint for import). */
+  sourceTimelineIndex: number;
+  sourceFilename: string;
+  snapshots: ServerSnapshot[];
+}

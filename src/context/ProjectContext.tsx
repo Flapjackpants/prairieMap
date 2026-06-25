@@ -218,8 +218,6 @@ interface ProjectContextValue {
   importProject: (data: ProjectExport, files: File[]) => Promise<void>;
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
   appendRecordedFrame: (sourceIndex: number, divisions: DivisionMarker[]) => Promise<number>;
-  mapClickHandler: ((x: number, y: number) => void) | null;
-  setMapClickHandler: (handler: ((x: number, y: number) => void) | null) => void;
   setFileCanvasSize: (filename: string, width: number, height: number) => void;
   saveToServer: () => Promise<void>;
   undo: () => Promise<void>;
@@ -263,9 +261,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const restoringRef = useRef(false);
   const markerClipboardRef = useRef<MarkerClipboard | null>(null);
   const [hasMarkerClipboard, setHasMarkerClipboard] = useState(false);
-  const [mapClickHandler, setMapClickHandler] = useState<
-    ((x: number, y: number) => void) | null
-  >(null);
 
   const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
 
@@ -1000,8 +995,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       appendRecordedFrame,
-      mapClickHandler,
-      setMapClickHandler,
       setFileCanvasSize,
       saveToServer,
       undo,
@@ -1051,8 +1044,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       appendRecordedFrame,
-      mapClickHandler,
-      setMapClickHandler,
       setFileCanvasSize,
       saveToServer,
       undo,
