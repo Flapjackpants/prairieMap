@@ -29,10 +29,13 @@ import { DEFAULT_DIVISION_MARKER_SIZE, isBlankAssetKey } from '../types/project'
 import { buildTransform } from '../utils/minecraftTransform';
 import {
   applyRecordingSessionToTimeline,
-  applyRecordingSnapshotToFrame,
   buildRecordingSession,
   downloadRecordingSession,
+  getSessionTransform,
   parseRecordingSession,
+  playersToDivisions,
+  selectSnapshotsAtRate,
+  type RecordingImportOptions,
 } from '../utils/minecraftSession';
 
 const POLL_INTERVAL_MS = 1000;
@@ -49,7 +52,7 @@ export type CalibrationPhase =
 
 export type RecordingTransport = 'idle' | 'sse' | 'poll';
 
-export type RecordingImportMode = 'timeline' | 'current-frame';
+export type RecordingImportMode = RecordingImportOptions['mode'];
 
 function getCalibrationPhase(
   a: Partial<CalibrationPair>,
@@ -107,11 +110,14 @@ export interface MinecraftRecordingContextValue {
   lastPlayerCount: number;
   recordingError: string | null;
   capturedSession: MinecraftRecordingSession | null;
+  loadedRecording: MinecraftRecordingSession | null;
   startRecording: () => void;
   stopRecording: () => void;
   resetRecordingStats: () => void;
   downloadCapturedSession: () => void;
-  importRecordingFile: (file: File, mode: RecordingImportMode) => Promise<void>;
+  loadRecordingFile: (file: File) => Promise<void>;
+  clearLoadedRecording: () => void;
+  applyLoadedRecording: (options: RecordingImportOptions) => Promise<void>;
   isImporting: boolean;
   importError: string | null;
   apiReady: boolean;
@@ -125,7 +131,7 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     apiReady,
     state,
     currentFrame,
-    appendRecordedFrame,
+    appendRecordedFramesBatch,
     upsertMarkers,
   } = useProject();
 
@@ -162,6 +168,7 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
   const [lastPlayerCount, setLastPlayerCount] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [capturedSession, setCapturedSession] = useState<MinecraftRecordingSession | null>(null);
+  const [loadedRecording, setLoadedRecording] = useState<MinecraftRecordingSession | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
@@ -403,39 +410,69 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     downloadRecordingSession(capturedSession);
   }, [capturedSession]);
 
-  const importRecordingFile = useCallback(
-    async (file: File, mode: RecordingImportMode) => {
+  const loadRecordingFile = useCallback(async (file: File) => {
+    setImportError(null);
+    try {
+      const text = await file.text();
+      const session = parseRecordingSession(JSON.parse(text) as unknown);
+      setLoadedRecording(session);
+    } catch (e) {
+      setLoadedRecording(null);
+      setImportError(e instanceof Error ? e.message : 'Invalid recording file');
+      throw e;
+    }
+  }, []);
+
+  const clearLoadedRecording = useCallback(() => {
+    setLoadedRecording(null);
+    setImportError(null);
+  }, []);
+
+  const applyLoadedRecording = useCallback(
+    async (options: RecordingImportOptions) => {
       setImportError(null);
+      if (!loadedRecording) {
+        setImportError('Choose a recording JSON file first.');
+        return;
+      }
       if (!apiReady) {
         setImportError('Start the PrairieMap API server (npm run dev:api).');
         return;
       }
       if (!currentFrame) {
-        setImportError('Load a map frame before importing a recording.');
+        setImportError('Load a map frame before applying a recording.');
+        return;
+      }
+      if (!Number.isFinite(options.framesPerSecond) || options.framesPerSecond <= 0) {
+        setImportError('Frame rate must be a positive number (e.g. 1 or 0.1).');
         return;
       }
 
       setIsImporting(true);
       try {
-        const text = await file.text();
-        const session = parseRecordingSession(JSON.parse(text) as unknown);
-
-        if (mode === 'timeline') {
+        if (options.mode === 'timeline') {
           await applyRecordingSessionToTimeline(
-            session,
+            loadedRecording,
             state.currentTimelineIndex,
-            appendRecordedFrame,
+            appendRecordedFramesBatch,
+            options.framesPerSecond,
           );
         } else {
-          const lastIndex = session.snapshots.length - 1;
-          await applyRecordingSnapshotToFrame(
-            session,
-            lastIndex,
-            currentFrame.frameData.annotations.cities,
-            upsertMarkers,
+          const selected = selectSnapshotsAtRate(
+            loadedRecording.snapshots,
+            options.framesPerSecond,
           );
+          const snapshot = selected[selected.length - 1]!;
+          const transform = getSessionTransform(loadedRecording);
+          const divisions = playersToDivisions(
+            Object.values(snapshot.players),
+            loadedRecording.anchorWorld,
+            transform,
+            loadedRecording.divisionTemplate,
+          );
+          await upsertMarkers(currentFrame.frameData.annotations.cities, divisions);
         }
-        setCapturedSession(session);
+        setCapturedSession(loadedRecording);
         setImportError(null);
       } catch (e) {
         setImportError(e instanceof Error ? e.message : 'Import failed');
@@ -444,7 +481,14 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
         setIsImporting(false);
       }
     },
-    [apiReady, appendRecordedFrame, currentFrame, state.currentTimelineIndex, upsertMarkers],
+    [
+      apiReady,
+      appendRecordedFramesBatch,
+      currentFrame,
+      loadedRecording,
+      state.currentTimelineIndex,
+      upsertMarkers,
+    ],
   );
 
   const openModal = useCallback(() => setModalOpen(true), []);
@@ -628,11 +672,14 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     lastPlayerCount,
     recordingError,
     capturedSession,
+    loadedRecording,
     startRecording,
     stopRecording,
     resetRecordingStats,
     downloadCapturedSession,
-    importRecordingFile,
+    loadRecordingFile,
+    clearLoadedRecording,
+    applyLoadedRecording,
     isImporting,
     importError,
     apiReady,

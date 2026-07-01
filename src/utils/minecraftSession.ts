@@ -123,23 +123,95 @@ export function getSessionTransform(session: MinecraftRecordingSession): Similar
   return buildTransform(session.calibrationA, session.calibrationB);
 }
 
+/** Normalize snapshot timestamps to milliseconds relative to the first sample. */
+export function snapshotTimesMs(snapshots: ServerSnapshot[]): number[] {
+  if (snapshots.length === 0) return [];
+  const sorted = [...snapshots].sort((a, b) => a.timestamp - b.timestamp);
+  const t0 = sorted[0]!.timestamp;
+  const relative = sorted.map((s) => s.timestamp - t0);
+  const span = relative[relative.length - 1] ?? 0;
+  const scale = span > 0 && span < sorted.length * 2 ? 1000 : 1;
+  return relative.map((t) => t * scale);
+}
+
+export function sortSnapshots(snapshots: ServerSnapshot[]): ServerSnapshot[] {
+  return [...snapshots].sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
+ * Pick snapshots spaced at the given output rate (frames per second).
+ * e.g. 1 fps → one frame per second of recording; 0.1 fps → one every 10 seconds.
+ */
+export function selectSnapshotsAtRate(
+  snapshots: ServerSnapshot[],
+  framesPerSecond: number,
+): ServerSnapshot[] {
+  if (!Number.isFinite(framesPerSecond) || framesPerSecond <= 0) {
+    throw new Error('Frame rate must be a positive number');
+  }
+  const sorted = sortSnapshots(snapshots);
+  if (sorted.length <= 1) return sorted;
+
+  const timesMs = snapshotTimesMs(sorted);
+  const durationMs = timesMs[timesMs.length - 1] ?? 0;
+  const intervalMs = 1000 / framesPerSecond;
+
+  if (durationMs <= 0 || intervalMs <= 0) {
+    return [sorted[0]!];
+  }
+
+  const selected: ServerSnapshot[] = [];
+  let snapIdx = 0;
+
+  for (let t = 0; t <= durationMs; t += intervalMs) {
+    while (snapIdx + 1 < sorted.length && timesMs[snapIdx + 1]! <= t) {
+      snapIdx += 1;
+    }
+    const snap = sorted[snapIdx]!;
+    if (selected.length === 0 || selected[selected.length - 1] !== snap) {
+      selected.push(snap);
+    }
+  }
+
+  const last = sorted[sorted.length - 1]!;
+  if (selected[selected.length - 1] !== last) {
+    selected.push(last);
+  }
+
+  return selected;
+}
+
+export function recordingDurationMs(snapshots: ServerSnapshot[]): number {
+  const times = snapshotTimesMs(snapshots);
+  return times[times.length - 1] ?? 0;
+}
+
+export interface RecordingImportOptions {
+  mode: 'timeline' | 'current-frame';
+  /** Output timeline frames per second of recording time (e.g. 1, 0.1). */
+  framesPerSecond: number;
+}
+
 export async function applyRecordingSessionToTimeline(
   session: MinecraftRecordingSession,
   sourceTimelineIndex: number,
-  appendRecordedFrame: (sourceIndex: number, divisions: DivisionMarker[]) => Promise<number>,
+  appendFramesBatch: (
+    sourceIndex: number,
+    divisionFrames: DivisionMarker[][],
+  ) => Promise<number>,
+  framesPerSecond = 1,
 ): Promise<number> {
   const transform = getSessionTransform(session);
-  let index = sourceTimelineIndex;
-  for (const snapshot of session.snapshots) {
-    const divisions = playersToDivisions(
+  const snapshots = selectSnapshotsAtRate(session.snapshots, framesPerSecond);
+  const divisionFrames = snapshots.map((snapshot) =>
+    playersToDivisions(
       Object.values(snapshot.players),
       session.anchorWorld,
       transform,
       session.divisionTemplate,
-    );
-    index = await appendRecordedFrame(index, divisions);
-  }
-  return index;
+    ),
+  );
+  return appendFramesBatch(sourceTimelineIndex, divisionFrames);
 }
 
 export async function applyRecordingSnapshotToFrame(

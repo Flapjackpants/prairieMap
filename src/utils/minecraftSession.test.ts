@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MinecraftRecordingSession } from '../types/minecraft';
+import type { DivisionMarker } from '../types/project';
 import {
   applyRecordingSessionToTimeline,
   buildRecordingSession,
   parseRecordingSession,
+  selectSnapshotsAtRate,
   playersToDivisions,
 } from './minecraftSession';
 import { buildTransform } from './minecraftTransform';
@@ -74,11 +76,38 @@ describe('playersToDivisions', () => {
   });
 });
 
+describe('selectSnapshotsAtRate', () => {
+  const makeSnapshots = (count: number, stepSec = 1) =>
+    Array.from({ length: count }, (_, i) => ({
+      timestamp: i * stepSec,
+      players: sampleSession.snapshots[0]!.players,
+    }));
+
+  it('keeps every snapshot at 1 fps for 1Hz capture', () => {
+    const snaps = makeSnapshots(10);
+    const selected = selectSnapshotsAtRate(snaps, 1);
+    expect(selected.length).toBeGreaterThanOrEqual(9);
+    expect(selected.length).toBeLessThanOrEqual(11);
+  });
+
+  it('subsamples at 0.1 fps', () => {
+    const snaps = makeSnapshots(30);
+    const selected = selectSnapshotsAtRate(snaps, 0.1);
+    expect(selected.length).toBeGreaterThanOrEqual(2);
+    expect(selected.length).toBeLessThanOrEqual(5);
+  });
+
+  it('rejects invalid frame rate', () => {
+    expect(() => selectSnapshotsAtRate(makeSnapshots(5), 0)).toThrow(/positive/);
+  });
+});
+
 describe('applyRecordingSessionToTimeline', () => {
-  it('appends one frame per snapshot', async () => {
-    const append = vi.fn(async (_idx: number) => 1);
-    const finalIndex = await applyRecordingSessionToTimeline(sampleSession, 0, append);
-    expect(append).toHaveBeenCalledTimes(1);
+  it('appends one frame per snapshot at 1 fps', async () => {
+    const appendBatch = vi.fn(async (_idx: number, frames: DivisionMarker[][]) => frames.length);
+    const finalIndex = await applyRecordingSessionToTimeline(sampleSession, 0, appendBatch);
+    expect(appendBatch).toHaveBeenCalledTimes(1);
+    expect(appendBatch).toHaveBeenCalledWith(0, expect.any(Array));
     expect(finalIndex).toBe(1);
   });
 });

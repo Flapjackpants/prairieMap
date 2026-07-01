@@ -29,7 +29,7 @@ import {
 } from '../types/project';
 import type { ProjectDisplaySettings } from '../types/displaySettings';
 import { DEFAULT_DISPLAY_SETTINGS } from '../types/displaySettings';
-import { mergeServerProject, toProjectBody } from '../types/projectBody';
+import { mergeServerProject, toProjectBody, type ProjectBody } from '../types/projectBody';
 import { getNextMapFilename } from '../utils/projectHelpers';
 import {
   buildFileRegistry,
@@ -218,6 +218,10 @@ interface ProjectContextValue {
   importProject: (data: ProjectExport, files: File[]) => Promise<void>;
   duplicateFrame: (sourceIndex: number, options: FrameDuplicateOptions) => Promise<boolean>;
   appendRecordedFrame: (sourceIndex: number, divisions: DivisionMarker[]) => Promise<number>;
+  appendRecordedFramesBatch: (
+    sourceIndex: number,
+    divisionFrames: DivisionMarker[][],
+  ) => Promise<number>;
   setFileCanvasSize: (filename: string, width: number, height: number) => void;
   saveToServer: () => Promise<void>;
   undo: () => Promise<void>;
@@ -256,6 +260,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const [historyTick, setHistoryTick] = useState(0);
   const stateRef = useRef(state);
   stateRef.current = state;
+  /** Latest server project body; updated synchronously after each mutation. */
+  const projectBodyRef = useRef<ProjectBody | null>(null);
   const undoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
   const redoStackRef = useRef<ReturnType<typeof toProjectBody>[]>([]);
   const restoringRef = useRef(false);
@@ -275,11 +281,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const applyMutation = useCallback((res: api.ProjectMutationResponse) => {
     dispatch({ type: 'APPLY_SERVER', body: res.project });
+    projectBodyRef.current = cloneProjectBody(res.project);
     if (res.projectId) {
       setProjectId(res.projectId);
       sessionStorage.setItem(PROJECT_ID_KEY, res.projectId);
     }
   }, []);
+
+  const projectBodyForMutation = useCallback(
+    (): ProjectBody => projectBodyRef.current ?? toProjectBody(stateRef.current),
+    [],
+  );
 
   const restoreProjectBody = useCallback(
     async (body: ReturnType<typeof toProjectBody>) => {
@@ -927,7 +939,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (sourceIndex: number, divisions: DivisionMarker[]): Promise<number> => {
       const res = await runMutation(() =>
         api.appendRecordedFrame({
-          project: toProjectBody(stateRef.current),
+          project: projectBodyForMutation(),
           sourceIndex,
           divisions,
           knownFilenames: knownFilenames(),
@@ -935,7 +947,33 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       );
       return res.project.currentTimelineIndex;
     },
-    [runMutation, knownFilenames],
+    [runMutation, knownFilenames, projectBodyForMutation],
+  );
+
+  const appendRecordedFramesBatch = useCallback(
+    async (sourceIndex: number, divisionFrames: DivisionMarker[][]): Promise<number> => {
+      if (divisionFrames.length === 0) {
+        return sourceIndex;
+      }
+      const res = await runMutation(async () => {
+        let project = projectBodyForMutation();
+        let index = sourceIndex;
+        let last: api.ProjectMutationResponse | undefined;
+        for (const divisions of divisionFrames) {
+          last = await api.appendRecordedFrame({
+            project,
+            sourceIndex: index,
+            divisions,
+            knownFilenames: knownFilenames(),
+          });
+          project = last.project;
+          index = last.project.currentTimelineIndex;
+        }
+        return last!;
+      });
+      return res.project.currentTimelineIndex;
+    },
+    [runMutation, knownFilenames, projectBodyForMutation],
   );
 
   const setFileCanvasSize = useCallback((filename: string, width: number, height: number) => {
@@ -995,6 +1033,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       appendRecordedFrame,
+      appendRecordedFramesBatch,
       setFileCanvasSize,
       saveToServer,
       undo,
@@ -1044,6 +1083,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       importProject,
       duplicateFrame,
       appendRecordedFrame,
+      appendRecordedFramesBatch,
       setFileCanvasSize,
       saveToServer,
       undo,

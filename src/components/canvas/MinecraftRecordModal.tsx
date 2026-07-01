@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMinecraftRecording } from '../../context/MinecraftRecordingContext';
 import type { CalibrationPhase, RecordingImportMode } from '../../context/MinecraftRecordingContext';
+import { recordingDurationMs, selectSnapshotsAtRate } from '../../utils/minecraftSession';
 import { MINECRAFT_API_TARGETS, type MinecraftApiTarget } from '../../types/minecraft';
 import { isBlankAssetKey } from '../../types/project';
 import { displayFilename } from '../../utils/projectHelpers';
@@ -59,6 +60,14 @@ function CheckItem({ done, label }: { done: boolean; label: string }) {
   );
 }
 
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '0s';
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+}
+
 export function MinecraftRecordModal() {
   const { state } = useProject();
   const rec = useMinecraftRecording();
@@ -67,6 +76,22 @@ export function MinecraftRecordModal() {
   const docked = rec.step === 'calibrate' || rec.step === 'record';
   const importInputRef = useRef<HTMLInputElement>(null);
   const [importMode, setImportMode] = useState<RecordingImportMode>('timeline');
+  const [importFps, setImportFps] = useState('1');
+
+  const loadedPreview = rec.loadedRecording
+    ? (() => {
+        const fps = Number(importFps);
+        const validFps = Number.isFinite(fps) && fps > 0;
+        const timelineFrames = validFps
+          ? selectSnapshotsAtRate(rec.loadedRecording.snapshots, fps).length
+          : 0;
+        return {
+          snapshotCount: rec.loadedRecording.snapshots.length,
+          durationMs: recordingDurationMs(rec.loadedRecording.snapshots),
+          timelineFrames: validFps ? timelineFrames : null,
+        };
+      })()
+    : null;
 
   useEffect(() => {
     if (!rec.modalOpen) return;
@@ -325,20 +350,12 @@ export function MinecraftRecordModal() {
 
             <div className="border-t border-metal-shadow pt-3">
               <p className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
-                Import recording JSON
+                Load recording
               </p>
-              <label className="mt-2 block font-mono text-[9px] tracking-widest text-text-muted uppercase">
-                Apply as
-                <select
-                  className="input-field mt-1 w-full font-mono text-xs normal-case"
-                  value={importMode}
-                  onChange={(e) => setImportMode(e.target.value as RecordingImportMode)}
-                  disabled={rec.isImporting}
-                >
-                  <option value="timeline">Timeline frames (one per snapshot)</option>
-                  <option value="current-frame">Current frame only (last snapshot)</option>
-                </select>
-              </label>
+              <p className="mt-1 font-mono text-[9px] leading-relaxed text-text-muted">
+                Import a captured JSON and choose how many timeline frames to create per second of
+                recording time.
+              </p>
               <input
                 ref={importInputRef}
                 type="file"
@@ -347,19 +364,82 @@ export function MinecraftRecordModal() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  void rec.importRecordingFile(file, importMode);
+                  void rec.loadRecordingFile(file);
                   e.target.value = '';
                 }}
               />
               <button
                 type="button"
                 className="btn-secondary mt-2 flex w-full items-center justify-center gap-1.5"
-                disabled={!rec.apiReady || !rec.hasCurrentFrame || rec.isImporting}
+                disabled={rec.isImporting}
                 onClick={() => importInputRef.current?.click()}
               >
                 <Upload className="h-3.5 w-3.5" />
-                {rec.isImporting ? 'Importing…' : 'Load JSON file'}
+                Choose JSON file
               </button>
+
+              {rec.loadedRecording && loadedPreview && (
+                <div className="mt-3 space-y-2 rounded border border-metal-shadow bg-metal-deep/40 px-3 py-2">
+                  <p className="font-mono text-[9px] text-accent-cyan">
+                    {loadedPreview.snapshotCount} snapshots · {formatDuration(loadedPreview.durationMs)}
+                  </p>
+                  <label className="block font-mono text-[9px] tracking-widest text-text-muted uppercase">
+                    Frames per second
+                    <input
+                      type="number"
+                      min={0.01}
+                      step={0.1}
+                      className="input-field mt-1 w-full font-mono text-xs normal-case"
+                      value={importFps}
+                      onChange={(e) => setImportFps(e.target.value)}
+                      disabled={rec.isImporting}
+                    />
+                  </label>
+                  <p className="font-mono text-[8px] text-text-muted">
+                    e.g. 1 = one frame per second of recording, 0.1 = one frame every 10 seconds
+                  </p>
+                  {loadedPreview.timelineFrames !== null && importMode === 'timeline' && (
+                    <p className="font-mono text-[9px] text-accent-orange">
+                      → {loadedPreview.timelineFrames} timeline frame
+                      {loadedPreview.timelineFrames === 1 ? '' : 's'}
+                    </p>
+                  )}
+                  <label className="block font-mono text-[9px] tracking-widest text-text-muted uppercase">
+                    Apply as
+                    <select
+                      className="input-field mt-1 w-full font-mono text-xs normal-case"
+                      value={importMode}
+                      onChange={(e) => setImportMode(e.target.value as RecordingImportMode)}
+                      disabled={rec.isImporting}
+                    >
+                      <option value="timeline">Timeline frames (sampled at rate above)</option>
+                      <option value="current-frame">Current frame only (last sampled snapshot)</option>
+                    </select>
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary flex-1"
+                      disabled={!rec.apiReady || !rec.hasCurrentFrame || rec.isImporting}
+                      onClick={() => {
+                        const fps = Number(importFps);
+                        void rec.applyLoadedRecording({ mode: importMode, framesPerSecond: fps });
+                      }}
+                    >
+                      {rec.isImporting ? 'Loading…' : 'Load recording'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost shrink-0"
+                      disabled={rec.isImporting}
+                      onClick={rec.clearLoadedRecording}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {rec.importError && (
                 <p className="mt-2 border border-accent-crimson/40 bg-accent-crimson/10 px-2 py-1.5 font-mono text-[9px] text-accent-crimson">
                   {rec.importError}
