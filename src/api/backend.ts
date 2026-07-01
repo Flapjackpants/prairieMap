@@ -133,6 +133,8 @@ export async function upsertMarkers(params: {
 
 export type DivisionIconScope = 'current_frame' | 'all_frames';
 
+export type RemoveDivisionScope = 'current_frame' | 'current_and_future';
+
 export async function updateDivisionIcon(params: {
   project: ProjectBody;
   divisionId: string;
@@ -146,6 +148,30 @@ export async function updateDivisionIcon(params: {
   target?: { filename: string; copyIndex: number };
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/update-division-icon', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function removeDivision(params: {
+  project: ProjectBody;
+  divisionId: string;
+  scope?: RemoveDivisionScope;
+  target?: { filename: string; copyIndex: number };
+  fromTimelineIndex?: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/remove-division', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function pasteTerritory(params: {
+  project: ProjectBody;
+  target: { filename: string; copyIndex: number };
+  sourceTimelineIndex: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/paste-territory', {
     method: 'POST',
     body: JSON.stringify(params),
   });

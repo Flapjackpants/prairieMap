@@ -212,6 +212,9 @@ interface ProjectContextValue {
   divisionIconEditorId: string | null;
   setDivisionIconEditorId: (id: string | null) => void;
   removeDivisionMarker: (id: string) => Promise<void>;
+  killDivisionMarker: (id: string) => Promise<void>;
+  pasteTerritoryFromPreviousFrame: () => Promise<void>;
+  canPasteTerritoryFromPrevious: boolean;
   copyMarkers: () => void;
   pasteMarkers: () => Promise<void>;
   hasMarkerClipboard: boolean;
@@ -409,6 +412,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   const currentFrame = useMemo(() => resolveCurrentFrame(state), [state]);
   const activeColor = state.palette.find((c) => c.id === state.activeColorId);
+  const canPasteTerritoryFromPrevious = state.currentTimelineIndex > 0;
 
   const knownFilenames = useCallback(
     () => Object.keys(stateRef.current.fileRegistry),
@@ -757,14 +761,54 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       const frame = resolveCurrentFrame(stateRef.current);
       if (!frame) return;
-      const divisions = frame.frameData.annotations.divisions.filter((d) => d.id !== id);
-      await upsertMarkers(frame.frameData.annotations.cities, divisions);
+      await runMutation(() =>
+        api.removeDivision({
+          project: projectBodyForMutation(),
+          divisionId: id,
+          scope: 'current_frame',
+          target: { filename: frame.filename, copyIndex: frame.copyIndex },
+        }),
+      );
       if (stateRef.current.selectedMarkerId === id) {
         setSelectedMarker(null, null);
       }
     },
-    [upsertMarkers, setSelectedMarker],
+    [projectBodyForMutation, runMutation, setSelectedMarker],
   );
+
+  const killDivisionMarker = useCallback(
+    async (id: string) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      await runMutation(() =>
+        api.removeDivision({
+          project: projectBodyForMutation(),
+          divisionId: id,
+          scope: 'current_and_future',
+          fromTimelineIndex: stateRef.current.currentTimelineIndex,
+        }),
+      );
+      if (stateRef.current.selectedMarkerId === id) {
+        setSelectedMarker(null, null);
+      }
+    },
+    [projectBodyForMutation, runMutation, setSelectedMarker],
+  );
+
+  const pasteTerritoryFromPreviousFrame = useCallback(async () => {
+    const s = stateRef.current;
+    const frame = resolveCurrentFrame(s);
+    const sourceIndex = s.currentTimelineIndex - 1;
+    if (!frame || sourceIndex < 0) return;
+    await runMutation(() =>
+      api.pasteTerritory({
+        project: projectBodyForMutation(),
+        target: { filename: frame.filename, copyIndex: frame.copyIndex },
+        sourceTimelineIndex: sourceIndex,
+      }),
+    );
+    setSelectedCountry(null);
+  }, [projectBodyForMutation, runMutation, setSelectedCountry]);
 
   const copyMarkers = useCallback(() => {
     const frame = resolveCurrentFrame(stateRef.current);
@@ -1058,6 +1102,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       divisionIconEditorId,
       setDivisionIconEditorId,
       removeDivisionMarker,
+      killDivisionMarker,
+      pasteTerritoryFromPreviousFrame,
+      canPasteTerritoryFromPrevious,
       copyMarkers,
       pasteMarkers,
       hasMarkerClipboard,
@@ -1111,6 +1158,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       divisionIconEditorId,
       setDivisionIconEditorId,
       removeDivisionMarker,
+      killDivisionMarker,
+      pasteTerritoryFromPreviousFrame,
+      canPasteTerritoryFromPrevious,
       copyMarkers,
       pasteMarkers,
       hasMarkerClipboard,

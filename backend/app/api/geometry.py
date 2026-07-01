@@ -8,7 +8,9 @@ from app.models.project import (
     ClaimAnchorRequest,
     DeleteCountryRequest,
     MoveVertexRequest,
+    PasteTerritoryRequest,
     ProjectMutationResponse,
+    RemoveDivisionRequest,
     RemoveVertexRequest,
     UpdateDivisionIconRequest,
     UpdateFactionMetadataRequest,
@@ -117,6 +119,32 @@ def update_division_icon(req: UpdateDivisionIconRequest) -> ProjectMutationRespo
     )
     if result is None:
         raise HTTPException(status_code=404, detail="Division not found")
+    return ProjectMutationResponse(project=result)
+
+
+@router.post("/remove-division", response_model=ProjectMutationResponse)
+def remove_division(req: RemoveDivisionRequest) -> ProjectMutationResponse:
+    result = project_service.remove_division(
+        req.project,
+        req.divisionId,
+        req.scope,
+        req.target,
+        req.fromTimelineIndex,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Division not found")
+    return ProjectMutationResponse(project=result)
+
+
+@router.post("/paste-territory", response_model=ProjectMutationResponse)
+def paste_territory(req: PasteTerritoryRequest) -> ProjectMutationResponse:
+    result = project_service.paste_territory_from_frame(
+        req.project,
+        req.target,
+        req.sourceTimelineIndex,
+    )
+    if result is None:
+        raise HTTPException(status_code=400, detail="Invalid territory paste request")
     return ProjectMutationResponse(project=result)
 
 

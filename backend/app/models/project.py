@@ -266,6 +266,20 @@ class UpdateDivisionIconRequest(BaseModel):
     target: AssetTarget | None = None
 
 
+class RemoveDivisionRequest(BaseModel):
+    project: ProjectBody
+    divisionId: str
+    scope: Literal["current_frame", "current_and_future"] = "current_frame"
+    target: AssetTarget | None = None
+    fromTimelineIndex: int | None = None
+
+
+class PasteTerritoryRequest(BaseModel):
+    project: ProjectBody
+    target: AssetTarget
+    sourceTimelineIndex: int
+
+
 class ProjectMutationResponse(BaseModel):
     project: ProjectBody
     projectId: str | None = None

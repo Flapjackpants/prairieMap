@@ -1,4 +1,4 @@
-import { Image, MapPin, Shield } from 'lucide-react';
+import { Image, MapPin, Shield, Skull } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 
@@ -11,6 +11,7 @@ export function MarkersPanel() {
     setDivisionIconEditorId,
     removeCityMarker,
     removeDivisionMarker,
+    killDivisionMarker,
     copyMarkers,
     pasteMarkers,
     hasMarkerClipboard,
@@ -111,7 +112,25 @@ export function MarkersPanel() {
                     </button>
                     <button
                       type="button"
+                      className="font-mono text-[8px] text-accent-orange"
+                      title="Kill division — remove from this frame and all later frames"
+                      onClick={() => {
+                        const label = d.name.trim() || d.sourceFilename.split('/').pop();
+                        if (
+                          confirm(
+                            `Kill "${label}"? It will be removed from this frame and every later timeline frame (past frames are kept).`,
+                          )
+                        ) {
+                          void killDivisionMarker(d.id);
+                        }
+                      }}
+                    >
+                      <Skull className="h-2.5 w-2.5" />
+                    </button>
+                    <button
+                      type="button"
                       className="font-mono text-[9px] text-accent-crimson"
+                      title="Remove from this frame only"
                       onClick={() => void removeDivisionMarker(d.id)}
                     >
                       ×
@@ -139,7 +158,7 @@ export function MarkersPanel() {
             </button>
           </div>
           <p className="font-mono text-[8px] leading-snug text-text-muted">
-            ⌘C copy (selected or all) · ⌘V paste on frame
+            ⌘C copy (selected or all) · ⌘V paste on frame · skull = kill on this + future frames
           </p>
         </div>
       )}

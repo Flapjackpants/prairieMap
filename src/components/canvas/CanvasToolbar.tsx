@@ -1,4 +1,4 @@
-import { Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
+import { ClipboardPaste, Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
@@ -25,6 +25,8 @@ export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
     addPaletteColor,
     deleteCountry,
     setSelectedCountry,
+    pasteTerritoryFromPreviousFrame,
+    canPasteTerritoryFromPrevious,
   } = useProject();
   const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
@@ -91,6 +93,16 @@ export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
           className={`btn-icon relative h-8 w-8 ${carryOverLabels ? 'btn-icon-active' : ''}`}
         >
           <Link2 className="h-3.5 w-3.5" />
+        </button>
+
+        <button
+          type="button"
+          title="Paste territory from previous timeline frame"
+          disabled={!canPasteTerritoryFromPrevious}
+          onClick={() => void pasteTerritoryFromPreviousFrame()}
+          className="btn-icon h-8 w-8"
+        >
+          <ClipboardPaste className="h-3.5 w-3.5" />
         </button>
 
         {state.selectedMarkerKind === 'division' && state.selectedMarkerId && onEditDivisionIcon && (
