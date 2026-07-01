@@ -33,19 +33,20 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; startCrop: DivisionCropRect } | null>(null);
 
+  // Seed form fields when opening the editor for a division — not on every project state tick.
   useEffect(() => {
-    if (division) {
-      setName(division.name?.trim() || 'Division');
-      setSourceFilename(
-        division.sourceFilename && filenames.includes(division.sourceFilename)
-          ? division.sourceFilename
-          : filenames[0] ?? '',
-      );
-      setCrop(division.crop);
-      setSize(division.size);
-      setApplyToAllFrames(countFramesWithDivision(state, divisionId) > 1);
-    }
-  }, [divisionId, division, filenames, state]);
+    if (!division) return;
+    setName(division.name?.trim() || 'Division');
+    setSourceFilename(
+      division.sourceFilename && filenames.includes(division.sourceFilename)
+        ? division.sourceFilename
+        : filenames[0] ?? '',
+    );
+    setCrop(division.crop ?? { x: 0, y: 0, width: 64, height: 64 });
+    setSize(division.size ?? DEFAULT_DIVISION_MARKER_SIZE);
+    setApplyToAllFrames(countFramesWithDivision(state, divisionId) > 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when switching divisions
+  }, [divisionId]);
 
   const sourceFile = sourceFilename
     ? state.fileRegistry[sourceFilename]?.file ?? null
