@@ -44,15 +44,17 @@ function CalibrationPoint({ x, y, label, color, scale }: CalibrationPointProps) 
 interface MinecraftCalibrationLayerProps {
   pointA: { mapX: number; mapY: number } | null;
   pointB: { mapX: number; mapY: number } | null;
+  anchorPreview: { x: number; y: number } | null;
   viewportScale: number;
 }
 
 export function MinecraftCalibrationLayer({
   pointA,
   pointB,
+  anchorPreview,
   viewportScale,
 }: MinecraftCalibrationLayerProps) {
-  if (!pointA && !pointB) return null;
+  if (!pointA && !pointB && !anchorPreview) return null;
   return (
     <>
       {pointA && (
@@ -70,6 +72,15 @@ export function MinecraftCalibrationLayer({
           y={pointB.mapY}
           label="B"
           color="#ffc400"
+          scale={viewportScale}
+        />
+      )}
+      {anchorPreview && (
+        <CalibrationPoint
+          x={anchorPreview.x}
+          y={anchorPreview.y}
+          label="You"
+          color="#ff4081"
           scale={viewportScale}
         />
       )}

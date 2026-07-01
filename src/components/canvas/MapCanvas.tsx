@@ -27,6 +27,13 @@ const MAX_SCALE = 8;
 const MIN_POLYGON_POINTS = 3;
 const DEFAULT_VIEWPORT: ViewportState = { scale: 1, x: 0, y: 0 };
 
+function imagePixelSize(img: HTMLImageElement): { width: number; height: number } {
+  return {
+    width: img.naturalWidth > 0 ? img.naturalWidth : img.width,
+    height: img.naturalHeight > 0 ? img.naturalHeight : img.height,
+  };
+}
+
 function useLoadedImage(url: string | null) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
 
@@ -170,8 +177,11 @@ export function MapCanvas() {
     if (!stage) return null;
     const pos = stage.getPointerPosition();
     if (!pos) return null;
-    const transform = stage.getAbsoluteTransform().copy().invert();
-    return transform.point(pos);
+    const v = liveViewportRef.current;
+    return {
+      x: (pos.x - v.x) / v.scale,
+      y: (pos.y - v.y) / v.scale,
+    };
   }, []);
 
   const resolveSnap = useCallback(
@@ -448,17 +458,18 @@ export function MapCanvas() {
 
   const fitToView = useCallback(() => {
     if (!image || !containerRef.current) return;
+    const { width: iw, height: ih } = imagePixelSize(image);
     const { width: cw, height: ch } = containerRef.current.getBoundingClientRect();
     const padding = 40;
     const scale = Math.min(
-      (cw - padding) / image.width,
-      (ch - padding) / image.height,
+      (cw - padding) / iw,
+      (ch - padding) / ih,
       1,
     );
     commitViewport({
       scale,
-      x: (cw - image.width * scale) / 2,
-      y: (ch - image.height * scale) / 2,
+      x: (cw - iw * scale) / 2,
+      y: (ch - ih * scale) / 2,
     });
   }, [image, commitViewport]);
 
@@ -468,9 +479,10 @@ export function MapCanvas() {
 
   useEffect(() => {
     if (image && currentFrame && !currentFrame.isBlank && !currentFrame.isMissing) {
-      setFileCanvasSize(currentFrame.filename, image.width, image.height);
+      const { width, height } = imagePixelSize(image);
+      setFileCanvasSize(currentFrame.filename, width, height);
     }
-  }, [image?.width, image?.height, currentFrame?.filename, currentFrame?.isBlank, currentFrame?.isMissing, setFileCanvasSize]);
+  }, [image, currentFrame?.filename, currentFrame?.isBlank, currentFrame?.isMissing, setFileCanvasSize]);
 
   const divisionImageMap = useDivisionImageMap(divisions, state.fileRegistry);
   const flagImageMap = useFlagImageMap(state.palette, state.fileRegistry);
@@ -498,8 +510,9 @@ export function MapCanvas() {
     [updateDivisionMarker],
   );
 
-  const canvasWidth = image?.width ?? currentFrame?.canvasWidth ?? 1920;
-  const canvasHeight = image?.height ?? currentFrame?.canvasHeight ?? 1080;
+  const loadedImageSize = image ? imagePixelSize(image) : null;
+  const canvasWidth = loadedImageSize?.width ?? currentFrame?.canvasWidth ?? 1920;
+  const canvasHeight = loadedImageSize?.height ?? currentFrame?.canvasHeight ?? 1080;
   const hasCanvas = Boolean(currentFrame);
 
   const fitBlankToView = useCallback(() => {
@@ -685,6 +698,7 @@ export function MapCanvas() {
                           }
                         : null
                     }
+                    anchorPreview={minecraftRec.anchorMapPreview}
                     viewportScale={viewport.scale}
                   />
                 )}

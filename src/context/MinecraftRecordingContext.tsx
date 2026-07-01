@@ -26,15 +26,17 @@ import type {
 } from '../types/minecraft';
 import { MINECRAFT_API_TARGETS, resolveMinecraftBaseUrl } from '../types/minecraft';
 import { DEFAULT_DIVISION_MARKER_SIZE, isBlankAssetKey } from '../types/project';
-import { buildTransform } from '../utils/minecraftTransform';
+import { buildTransform, gameToMap } from '../utils/minecraftTransform';
 import {
   applyRecordingSessionToTimeline,
   buildRecordingSession,
   downloadRecordingSession,
   getSessionTransform,
+  mergeSessionForImport,
   parseRecordingSession,
   playersToDivisions,
   selectSnapshotsAtRate,
+  worldsMatch,
   type RecordingImportOptions,
 } from '../utils/minecraftSession';
 
@@ -100,6 +102,9 @@ export interface MinecraftRecordingContextValue {
   cancelMapPick: () => void;
   setMapPoint: (which: 'A' | 'B', mapX: number, mapY: number) => void;
   calibrationComplete: boolean;
+  /** Live anchor player projected onto the map (verify calibration before recording). */
+  anchorMapPreview: { x: number; y: number } | null;
+  refreshAnchorMapPreview: () => Promise<void>;
   divisionTemplate: DivisionTemplate;
   setDivisionTemplate: React.Dispatch<React.SetStateAction<DivisionTemplate>>;
   isRecording: boolean;
@@ -171,6 +176,7 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
   const [loadedRecording, setLoadedRecording] = useState<MinecraftRecordingSession | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [anchorMapPreview, setAnchorMapPreview] = useState<{ x: number; y: number } | null>(null);
 
   const capturedSnapshotsRef = useRef<ServerSnapshot[]>([]);
   const recordingActiveRef = useRef(false);
@@ -195,6 +201,35 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     calibrationB.mapY !== undefined;
 
   const calibrationPhase = getCalibrationPhase(calibrationA, calibrationB, awaitingMapClick);
+
+  const refreshAnchorMapPreview = useCallback(async () => {
+    if (!calibrationComplete || !anchorUuid) {
+      setAnchorMapPreview(null);
+      return;
+    }
+    try {
+      const player = await fetchPlayer(baseUrl, anchorUuid);
+      const transform = buildTransform(
+        calibrationA as CalibrationPair,
+        calibrationB as CalibrationPair,
+      );
+      setAnchorMapPreview(gameToMap(transform, player.x, player.z));
+      setRecordingError(null);
+    } catch (e) {
+      setAnchorMapPreview(null);
+      setRecordingError(e instanceof Error ? e.message : 'Failed to preview anchor on map');
+    }
+  }, [anchorUuid, baseUrl, calibrationA, calibrationB, calibrationComplete]);
+
+  useEffect(() => {
+    if (!calibrationComplete || !modalOpen) {
+      setAnchorMapPreview(null);
+      return;
+    }
+    void refreshAnchorMapPreview();
+    const id = setInterval(() => void refreshAnchorMapPreview(), 2000);
+    return () => clearInterval(id);
+  }, [calibrationComplete, modalOpen, refreshAnchorMapPreview]);
 
   const clearPollInterval = useCallback(() => {
     if (pollIntervalRef.current) {
@@ -251,7 +286,9 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
   const ingestSnapshot = useCallback(
     (snapshot: ServerSnapshot) => {
       capturedSnapshotsRef.current.push(snapshot);
-      const playerList = Object.values(snapshot.players).filter((p) => p.world === anchorWorld);
+      const playerList = Object.values(snapshot.players).filter((p) =>
+        worldsMatch(p.world, anchorWorld),
+      );
       setFramesRecorded(capturedSnapshotsRef.current.length);
       setLastSnapshotTime(snapshot.timestamp);
       setLastPlayerCount(playerList.length);
@@ -416,12 +453,21 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
       const text = await file.text();
       const session = parseRecordingSession(JSON.parse(text) as unknown);
       setLoadedRecording(session);
+      // Keep the Calibrate step the user just finished — only pull calibration from the file
+      // when the UI has no complete calibration yet.
+      if (!calibrationComplete) {
+        setCalibrationA(session.calibrationA);
+        setCalibrationB(session.calibrationB);
+        setAnchorUuid(session.anchorUuid);
+        setAnchorWorld(session.anchorWorld);
+      }
+      setStep('record');
     } catch (e) {
       setLoadedRecording(null);
       setImportError(e instanceof Error ? e.message : 'Invalid recording file');
       throw e;
     }
-  }, []);
+  }, [calibrationComplete]);
 
   const clearLoadedRecording = useCallback(() => {
     setLoadedRecording(null);
@@ -450,25 +496,37 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
 
       setIsImporting(true);
       try {
+        const sessionForImport = mergeSessionForImport(
+          loadedRecording,
+          calibrationComplete
+            ? {
+                calibrationA: calibrationA as CalibrationPair,
+                calibrationB: calibrationB as CalibrationPair,
+                anchorWorld,
+                anchorUuid,
+              }
+            : undefined,
+        );
+
         if (options.mode === 'timeline') {
           await applyRecordingSessionToTimeline(
-            loadedRecording,
+            sessionForImport,
             state.currentTimelineIndex,
             appendRecordedFramesBatch,
             options.framesPerSecond,
           );
         } else {
           const selected = selectSnapshotsAtRate(
-            loadedRecording.snapshots,
+            sessionForImport.snapshots,
             options.framesPerSecond,
           );
           const snapshot = selected[selected.length - 1]!;
-          const transform = getSessionTransform(loadedRecording);
+          const transform = getSessionTransform(sessionForImport);
           const divisions = playersToDivisions(
             Object.values(snapshot.players),
-            loadedRecording.anchorWorld,
+            sessionForImport.anchorWorld,
             transform,
-            loadedRecording.divisionTemplate,
+            sessionForImport.divisionTemplate,
           );
           await upsertMarkers(currentFrame.frameData.annotations.cities, divisions);
         }
@@ -484,6 +542,11 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     [
       apiReady,
       appendRecordedFramesBatch,
+      anchorWorld,
+      anchorUuid,
+      calibrationA,
+      calibrationB,
+      calibrationComplete,
       currentFrame,
       loadedRecording,
       state.currentTimelineIndex,
@@ -581,13 +644,17 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     }
     setAwaitingMapClick(null);
     setRecordingError(null);
-  }, []);
+    if (which === 'B') {
+      void refreshAnchorMapPreview();
+    }
+  }, [refreshAnchorMapPreview]);
 
   const resetCalibration = useCallback(() => {
     setCalibrationA({});
     setCalibrationB({});
     setAwaitingMapClick(null);
     setRecordingError(null);
+    setAnchorMapPreview(null);
   }, []);
 
   const cancelMapPick = useCallback(() => {
@@ -662,6 +729,8 @@ export function MinecraftRecordingProvider({ children }: { children: ReactNode }
     cancelMapPick,
     setMapPoint,
     calibrationComplete,
+    anchorMapPreview,
+    refreshAnchorMapPreview,
     divisionTemplate,
     setDivisionTemplate,
     isRecording,

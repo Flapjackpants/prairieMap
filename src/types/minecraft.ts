@@ -86,7 +86,7 @@ export interface CalibrationPair {
 
 export const MINECRAFT_RECORDING_SESSION_VERSION = 1;
 
-/** Sidecar file: raw API snapshots + calibration for deferred division import. */
+/** Sidecar file: raw API snapshots (absolute world x/z per player) + calibration for import. */
 export interface MinecraftRecordingSession {
   version: typeof MINECRAFT_RECORDING_SESSION_VERSION;
   recordedAt: string;

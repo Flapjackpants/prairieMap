@@ -7,16 +7,50 @@ import type {
 } from '../types/minecraft';
 import { MINECRAFT_RECORDING_SESSION_VERSION } from '../types/minecraft';
 import type { DivisionMarker, CityMarker } from '../types/project';
-import { buildTransform, gameToMap, type SimilarityTransform } from './minecraftTransform';
+import { buildTransform, gameToMap, type LinearMapTransform } from './minecraftTransform';
+
+/** Match world ids with or without the `minecraft:` namespace prefix. */
+export function worldsMatch(playerWorld: string, anchorWorld: string): boolean {
+  if (playerWorld === anchorWorld) return true;
+  const strip = (w: string) => w.replace(/^minecraft:/, '');
+  return strip(playerWorld) === strip(anchorWorld);
+}
+
+/**
+ * Snapshots store raw Minecraft world coordinates from the API (`x`, `z` in blocks).
+ * Map pixel positions are not stored — they are computed at import via calibration.
+ */
+export function mergeSessionForImport(
+  session: MinecraftRecordingSession,
+  liveCalibration?: {
+    calibrationA: CalibrationPair;
+    calibrationB: CalibrationPair;
+    anchorWorld: string;
+    anchorUuid: string;
+  },
+): MinecraftRecordingSession {
+  if (!liveCalibration) return session;
+  return {
+    ...session,
+    calibrationA: liveCalibration.calibrationA,
+    calibrationB: liveCalibration.calibrationB,
+    anchorWorld: liveCalibration.anchorWorld,
+    anchorUuid: liveCalibration.anchorUuid,
+  };
+}
+
+export function calibrationsEqual(a: CalibrationPair, b: CalibrationPair): boolean {
+  return a.gameX === b.gameX && a.gameZ === b.gameZ && a.mapX === b.mapX && a.mapY === b.mapY;
+}
 
 export function playersToDivisions(
   players: PlayerSnapshot[],
   anchorWorld: string,
-  transform: SimilarityTransform,
+  transform: LinearMapTransform,
   template: DivisionTemplate,
 ): DivisionMarker[] {
   return players
-    .filter((p) => p.world === anchorWorld)
+    .filter((p) => worldsMatch(p.world, anchorWorld))
     .map((p) => {
       const { x, y } = gameToMap(transform, p.x, p.z);
       return {
@@ -119,7 +153,7 @@ export function parseRecordingSession(raw: unknown): MinecraftRecordingSession {
   };
 }
 
-export function getSessionTransform(session: MinecraftRecordingSession): SimilarityTransform {
+export function getSessionTransform(session: MinecraftRecordingSession): LinearMapTransform {
   return buildTransform(session.calibrationA, session.calibrationB);
 }
 

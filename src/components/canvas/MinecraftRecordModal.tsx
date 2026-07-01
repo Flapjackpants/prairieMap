@@ -197,9 +197,16 @@ export function MinecraftRecordModal() {
         {rec.step === 'calibrate' && (
           <div className="space-y-3">
             <p className="font-mono text-[9px] leading-relaxed text-text-muted">
-              Stand at a known spot in-game, capture your position, then click that same spot on the map. Repeat
-              for a second point at least 1 block away.
+              Capture your in-game X/Z at spot A, click that spot on the map. Repeat at a different
+              spot B where both X and Z change. Every player position is then mapped linearly:
+              game X → map X, game Z → map Y.
             </p>
+            {rec.calibrationComplete && (
+              <p className="font-mono text-[8px] text-accent-cyan">
+                Pink &quot;You&quot; marker on the map shows where the anchor player should be right
+                now — use it to verify calibration before recording.
+              </p>
+            )}
 
             <label className="block font-mono text-[9px] tracking-widest text-text-muted uppercase">
               Your player
@@ -398,6 +405,16 @@ export function MinecraftRecordModal() {
                   <p className="font-mono text-[8px] text-text-muted">
                     e.g. 1 = one frame per second of recording, 0.1 = one frame every 10 seconds
                   </p>
+                  <p className="font-mono text-[8px] text-text-muted">
+                    Snapshots store raw Minecraft X/Z (world blocks). Map positions are computed on
+                    import using your current Calibrate-step calibration when it is complete.
+                  </p>
+                  {rec.calibrationComplete && (
+                    <p className="font-mono text-[8px] text-accent-cyan">
+                      Your Calibrate-step points are kept when loading a file — import will not use
+                      the file&apos;s embedded calibration.
+                    </p>
+                  )}
                   {loadedPreview.timelineFrames !== null && importMode === 'timeline' && (
                     <p className="font-mono text-[9px] text-accent-orange">
                       → {loadedPreview.timelineFrames} timeline frame

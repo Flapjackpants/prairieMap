@@ -7,6 +7,7 @@ import {
   parseRecordingSession,
   selectSnapshotsAtRate,
   playersToDivisions,
+  mergeSessionForImport,
 } from './minecraftSession';
 import { buildTransform } from './minecraftTransform';
 
@@ -18,7 +19,7 @@ const sampleSession: MinecraftRecordingSession = {
   anchorUuid: 'player-1',
   anchorWorld: 'overworld',
   calibrationA: { gameX: 0, gameZ: 0, mapX: 100, mapY: 200 },
-  calibrationB: { gameX: 100, gameZ: 0, mapX: 200, mapY: 200 },
+  calibrationB: { gameX: 100, gameZ: 50, mapX: 200, mapY: 250 },
   divisionTemplate: {
     sourceFilename: 'icons.png',
     crop: { x: 0, y: 0, width: 64, height: 64 },
@@ -62,17 +63,48 @@ describe('parseRecordingSession', () => {
 });
 
 describe('playersToDivisions', () => {
-  it('maps players in anchor world to division markers', () => {
+  it('maps absolute world x/z from snapshots to map pixels via session calibration', () => {
     const transform = buildTransform(sampleSession.calibrationA, sampleSession.calibrationB);
     const divisions = playersToDivisions(
       Object.values(sampleSession.snapshots[0]!.players),
-      'overworld',
+      sampleSession.anchorWorld,
       transform,
       sampleSession.divisionTemplate,
     );
     expect(divisions).toHaveLength(1);
     expect(divisions[0]!.name).toBe('Steve');
-    expect(divisions[0]!.id).toBe('player-1');
+    expect(divisions[0]!.x).toBeCloseTo(150);
+    expect(divisions[0]!.y).toBeCloseTo(210);
+  });
+
+  it('matches overworld with minecraft:overworld namespace', () => {
+    const transform = buildTransform(sampleSession.calibrationA, sampleSession.calibrationB);
+    const player = {
+      ...sampleSession.snapshots[0]!.players['player-1']!,
+      world: 'minecraft:overworld',
+    };
+    const divisions = playersToDivisions(
+      [player],
+      'overworld',
+      transform,
+      sampleSession.divisionTemplate,
+    );
+    expect(divisions).toHaveLength(1);
+  });
+});
+
+describe('mergeSessionForImport', () => {
+  it('prefers live calibration over embedded file calibration', () => {
+    const liveA = { gameX: 5100, gameZ: 5200, mapX: 100, mapY: 200 };
+    const liveB = { gameX: 5200, gameZ: 5300, mapX: 200, mapY: 300 };
+    const merged = mergeSessionForImport(sampleSession, {
+      calibrationA: liveA,
+      calibrationB: liveB,
+      anchorWorld: 'minecraft:overworld',
+      anchorUuid: 'player-1',
+    });
+    expect(merged.calibrationA).toEqual(liveA);
+    expect(merged.snapshots).toEqual(sampleSession.snapshots);
   });
 });
 
