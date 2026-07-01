@@ -182,3 +182,11 @@ export function getNextMapFilename(
 
   return null;
 }
+
+export function countFramesWithDivision(state: ProjectState, divisionId: string): number {
+  return state.timeline.filter((entry) =>
+    state.assets[entry.filename]?.[entry.copyIndex]?.annotations.divisions.some(
+      (d) => d.id === divisionId,
+    ),
+  ).length;
+}

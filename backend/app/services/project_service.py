@@ -8,6 +8,7 @@ from app.models.project import (
     AssetTarget,
     CityMarker,
     CountryTerritory,
+    DivisionIconPatch,
     DivisionMarker,
     FrameAnnotations,
     FrameDuplicateOptions,
@@ -297,6 +298,84 @@ def upsert_markers(
             }
         ),
     )
+    return project.model_copy(update={"assets": assets})
+
+
+def _apply_division_icon_patch(
+    division: DivisionMarker, patch: DivisionIconPatch
+) -> DivisionMarker:
+    updates: dict = {}
+    if patch.name is not None:
+        updates["name"] = patch.name
+    if patch.sourceFilename is not None:
+        updates["sourceFilename"] = patch.sourceFilename
+    if patch.crop is not None:
+        updates["crop"] = patch.crop
+    if patch.size is not None:
+        updates["size"] = patch.size
+    if not updates:
+        return division
+    return division.model_copy(update=updates)
+
+
+def update_division_icon(
+    project: ProjectBody,
+    division_id: str,
+    patch: DivisionIconPatch,
+    scope: str,
+    target: AssetTarget | None,
+) -> ProjectBody | None:
+    icon_patch = DivisionIconPatch.model_validate(patch)
+    found = False
+
+    if scope == "current_frame":
+        if target is None:
+            return None
+        frame_state = get_asset_state(project.assets, target.filename, target.copyIndex)
+        updated_divisions: list[DivisionMarker] = []
+        for division in frame_state.annotations.divisions:
+            if division.id == division_id:
+                updated_divisions.append(_apply_division_icon_patch(division, icon_patch))
+                found = True
+            else:
+                updated_divisions.append(division)
+        if not found:
+            return None
+        assets = update_asset_at(
+            project.assets,
+            target,
+            lambda s: s.model_copy(
+                update={
+                    "annotations": s.annotations.model_copy(
+                        update={"divisions": updated_divisions}
+                    )
+                }
+            ),
+        )
+        return project.model_copy(update={"assets": assets})
+
+    assets = {k: list(v) for k, v in project.assets.items()}
+    for filename, copies in assets.items():
+        for copy_index, frame_state in enumerate(copies):
+            updated_divisions = []
+            frame_changed = False
+            for division in frame_state.annotations.divisions:
+                if division.id == division_id:
+                    updated_divisions.append(_apply_division_icon_patch(division, icon_patch))
+                    frame_changed = True
+                    found = True
+                else:
+                    updated_divisions.append(division)
+            if frame_changed:
+                copies[copy_index] = frame_state.model_copy(
+                    update={
+                        "annotations": frame_state.annotations.model_copy(
+                            update={"divisions": updated_divisions}
+                        )
+                    }
+                )
+    if not found:
+        return None
     return project.model_copy(update={"assets": assets})
 
 

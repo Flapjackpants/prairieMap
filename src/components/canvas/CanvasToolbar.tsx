@@ -13,10 +13,10 @@ const TOOLS: { id: ToolMode; icon: typeof Hand; label: string; shortcut: string 
 ];
 
 interface CanvasToolbarProps {
-  onEditDivisionCrop?: (divisionId: string) => void;
+  onEditDivisionIcon?: (divisionId: string) => void;
 }
 
-export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
+export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
   const {
     state,
     setTool,
@@ -93,14 +93,14 @@ export function CanvasToolbar({ onEditDivisionCrop }: CanvasToolbarProps) {
           <Link2 className="h-3.5 w-3.5" />
         </button>
 
-        {state.selectedMarkerKind === 'division' && state.selectedMarkerId && onEditDivisionCrop && (
+        {state.selectedMarkerKind === 'division' && state.selectedMarkerId && onEditDivisionIcon && (
           <button
             type="button"
-            title="Edit division crop"
+            title="Edit division icon"
             className="btn-icon h-8 px-2 font-mono text-[8px] tracking-wider"
-            onClick={() => onEditDivisionCrop(state.selectedMarkerId!)}
+            onClick={() => onEditDivisionIcon(state.selectedMarkerId!)}
           >
-            CROP
+            ICON
           </button>
         )}
 

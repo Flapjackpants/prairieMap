@@ -2,6 +2,19 @@ import { Header } from './Header';
 import { FrameSidebar } from '../sidebar/FrameSidebar';
 import { MapCanvas } from '../canvas/MapCanvas';
 import { InfoBoard } from '../infoboard/InfoBoard';
+import { DivisionCropModal } from '../canvas/DivisionCropModal';
+import { useProject } from '../../context/ProjectContext';
+
+function DivisionIconEditorHost() {
+  const { divisionIconEditorId, setDivisionIconEditorId } = useProject();
+  if (!divisionIconEditorId) return null;
+  return (
+    <DivisionCropModal
+      divisionId={divisionIconEditorId}
+      onClose={() => setDivisionIconEditorId(null)}
+    />
+  );
+}
 
 export function AppLayout() {
   return (
@@ -14,6 +27,7 @@ export function AppLayout() {
           <InfoBoard />
         </div>
       </div>
+      <DivisionIconEditorHost />
     </div>
   );
 }

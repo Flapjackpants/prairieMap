@@ -1,4 +1,4 @@
-import { MapPin, Shield } from 'lucide-react';
+import { Image, MapPin, Shield } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 
@@ -8,6 +8,7 @@ export function MarkersPanel() {
     state,
     setSelectedMarker,
     setTool,
+    setDivisionIconEditorId,
     removeCityMarker,
     removeDivisionMarker,
     copyMarkers,
@@ -95,6 +96,18 @@ export function MarkersPanel() {
                     >
                     <Shield className="mr-0.5 inline h-2.5 w-2.5" />
                     {d.name.trim() || d.sourceFilename.split('/').pop()}
+                    </button>
+                    <button
+                      type="button"
+                      className="font-mono text-[8px] text-accent-cyan"
+                      title="Edit division icon"
+                      onClick={() => {
+                        setTool('select');
+                        setSelectedMarker(d.id, 'division');
+                        setDivisionIconEditorId(d.id);
+                      }}
+                    >
+                      <Image className="h-2.5 w-2.5" />
                     </button>
                     <button
                       type="button"

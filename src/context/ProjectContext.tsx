@@ -204,6 +204,13 @@ interface ProjectContextValue {
     id: string,
     patch: Partial<Omit<DivisionMarker, 'id'>>,
   ) => Promise<void>;
+  updateDivisionIcon: (
+    id: string,
+    patch: Partial<Pick<DivisionMarker, 'name' | 'sourceFilename' | 'crop' | 'size'>>,
+    scope?: api.DivisionIconScope,
+  ) => Promise<void>;
+  divisionIconEditorId: string | null;
+  setDivisionIconEditorId: (id: string | null) => void;
   removeDivisionMarker: (id: string) => Promise<void>;
   copyMarkers: () => void;
   pasteMarkers: () => Promise<void>;
@@ -267,6 +274,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const restoringRef = useRef(false);
   const markerClipboardRef = useRef<MarkerClipboard | null>(null);
   const [hasMarkerClipboard, setHasMarkerClipboard] = useState(false);
+  const [divisionIconEditorId, setDivisionIconEditorId] = useState<string | null>(null);
 
   const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
 
@@ -721,6 +729,30 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [upsertMarkers],
   );
 
+  const updateDivisionIcon = useCallback(
+    async (
+      id: string,
+      patch: Partial<Pick<DivisionMarker, 'name' | 'sourceFilename' | 'crop' | 'size'>>,
+      scope: api.DivisionIconScope = 'all_frames',
+    ) => {
+      const frame = resolveCurrentFrame(stateRef.current);
+      if (!frame) return;
+      await runMutation(() =>
+        api.updateDivisionIcon({
+          project: projectBodyForMutation(),
+          divisionId: id,
+          patch,
+          scope,
+          target:
+            scope === 'current_frame'
+              ? { filename: frame.filename, copyIndex: frame.copyIndex }
+              : undefined,
+        }),
+      );
+    },
+    [projectBodyForMutation, runMutation],
+  );
+
   const removeDivisionMarker = useCallback(
     async (id: string) => {
       const frame = resolveCurrentFrame(stateRef.current);
@@ -1022,6 +1054,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeCityMarker,
       addDivisionMarker,
       updateDivisionMarker,
+      updateDivisionIcon,
+      divisionIconEditorId,
+      setDivisionIconEditorId,
       removeDivisionMarker,
       copyMarkers,
       pasteMarkers,
@@ -1072,6 +1107,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       removeCityMarker,
       addDivisionMarker,
       updateDivisionMarker,
+      updateDivisionIcon,
+      divisionIconEditorId,
+      setDivisionIconEditorId,
       removeDivisionMarker,
       copyMarkers,
       pasteMarkers,

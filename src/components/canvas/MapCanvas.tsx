@@ -19,7 +19,6 @@ import { TerritoryFillsLayer } from './TerritoryFillsLayer';
 import { TerritoryLabelsLayer } from './TerritoryLabelsLayer';
 import { MarkerLayer } from './MarkerLayer';
 import { CityNameModal } from './CityNameModal';
-import { DivisionCropModal } from './DivisionCropModal';
 import { MinecraftCalibrationLayer } from './MinecraftCalibrationLayer';
 import { useMinecraftRecordingOptional } from '../../context/MinecraftRecordingContext';
 
@@ -63,6 +62,7 @@ export function MapCanvas() {
     addDivisionMarker,
     updateCityMarker,
     updateDivisionMarker,
+    setDivisionIconEditorId,
     setFileCanvasSize,
   } = useProject();
   const minecraftRec = useMinecraftRecordingOptional();
@@ -74,7 +74,6 @@ export function MapCanvas() {
 
   const { tool, selectedCountryId, activeColorId, selectedMarkerId, selectedMarkerKind } =
     state;
-  const [cropDivisionId, setCropDivisionId] = useState<string | null>(null);
   const [pendingCityPlacement, setPendingCityPlacement] = useState<{ x: number; y: number } | null>(
     null,
   );
@@ -380,10 +379,10 @@ export function MapCanvas() {
     }
     if (isDivisionTool) {
       void addDivisionMarker(raw.x, raw.y).then((id) => {
-        if (id) setCropDivisionId(id);
+        if (id) setDivisionIconEditorId(id);
       });
     }
-  }, [getPointerOnImage, isCityTool, isDivisionTool, addDivisionMarker]);
+  }, [getPointerOnImage, isCityTool, isDivisionTool, addDivisionMarker, setDivisionIconEditorId]);
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     const raw = getPointerOnImage();
@@ -583,11 +582,11 @@ export function MapCanvas() {
             <p className="max-w-sm font-mono text-[10px] leading-relaxed tracking-wide text-text-muted uppercase">
               Reload folder or restore image to edit this frame.
             </p>
-            <CanvasToolbar onEditDivisionCrop={(id) => setCropDivisionId(id)} />
+            <CanvasToolbar onEditDivisionIcon={(id) => setDivisionIconEditorId(id)} />
           </div>
         ) : (
           <>
-            <CanvasToolbar onEditDivisionCrop={(id) => setCropDivisionId(id)} />
+            <CanvasToolbar onEditDivisionIcon={(id) => setDivisionIconEditorId(id)} />
             <Stage
               ref={stageRef}
               width={stageSize.width}
@@ -785,13 +784,6 @@ export function MapCanvas() {
             setPendingCityPlacement(null);
             void addCityMarker(x, y, name);
           }}
-        />
-      )}
-
-      {cropDivisionId && (
-        <DivisionCropModal
-          divisionId={cropDivisionId}
-          onClose={() => setCropDivisionId(null)}
         />
       )}
 

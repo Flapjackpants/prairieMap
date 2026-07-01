@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models.project import (
     AddPaletteColorRequest,
@@ -10,6 +10,7 @@ from app.models.project import (
     MoveVertexRequest,
     ProjectMutationResponse,
     RemoveVertexRequest,
+    UpdateDivisionIconRequest,
     UpdateFactionMetadataRequest,
     UpdateFrameInfoRequest,
     UpsertMarkersRequest,
@@ -103,6 +104,20 @@ def upsert_markers(req: UpsertMarkersRequest) -> ProjectMutationResponse:
         req.project, req.target, req.cities, req.divisions
     )
     return ProjectMutationResponse(project=project)
+
+
+@router.post("/update-division-icon", response_model=ProjectMutationResponse)
+def update_division_icon(req: UpdateDivisionIconRequest) -> ProjectMutationResponse:
+    result = project_service.update_division_icon(
+        req.project,
+        req.divisionId,
+        req.patch,
+        req.scope,
+        req.target,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Division not found")
+    return ProjectMutationResponse(project=result)
 
 
 @router.post("/update-frame-info", response_model=ProjectMutationResponse)

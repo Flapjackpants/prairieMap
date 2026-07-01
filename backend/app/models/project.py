@@ -251,6 +251,21 @@ class UpsertMarkersRequest(BaseModel):
     divisions: list[DivisionMarker]
 
 
+class DivisionIconPatch(BaseModel):
+    name: str | None = None
+    sourceFilename: str | None = None
+    crop: DivisionCropRect | None = None
+    size: float | None = None
+
+
+class UpdateDivisionIconRequest(BaseModel):
+    project: ProjectBody
+    divisionId: str
+    patch: DivisionIconPatch
+    scope: Literal["current_frame", "all_frames"] = "all_frames"
+    target: AssetTarget | None = None
+
+
 class ProjectMutationResponse(BaseModel):
     project: ProjectBody
     projectId: str | None = None

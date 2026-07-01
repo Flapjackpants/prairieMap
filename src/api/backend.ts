@@ -131,6 +131,26 @@ export async function upsertMarkers(params: {
   });
 }
 
+export type DivisionIconScope = 'current_frame' | 'all_frames';
+
+export async function updateDivisionIcon(params: {
+  project: ProjectBody;
+  divisionId: string;
+  patch: {
+    name?: string;
+    sourceFilename?: string;
+    crop?: import('../types/project').DivisionCropRect;
+    size?: number;
+  };
+  scope?: DivisionIconScope;
+  target?: { filename: string; copyIndex: number };
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/geometry/update-division-icon', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function moveTerritoryVertex(params: {
   project: ProjectBody;
   target: { filename: string; copyIndex: number };

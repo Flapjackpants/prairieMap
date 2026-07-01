@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMapImageUrl } from '../../hooks/useMapImageUrl';
 import { useProject } from '../../context/ProjectContext';
-import { displayFilename } from '../../utils/projectHelpers';
+import { displayFilename, countFramesWithDivision } from '../../utils/projectHelpers';
 import { DEFAULT_DIVISION_MARKER_SIZE, isBlankAssetKey } from '../../types/project';
 import type { DivisionCropRect } from '../../types/project';
+import type { DivisionIconScope } from '../../api/backend';
 
 interface DivisionCropModalProps {
   divisionId: string;
@@ -11,16 +12,23 @@ interface DivisionCropModalProps {
 }
 
 export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProps) {
-  const { state, currentFrame, updateDivisionMarker } = useProject();
+  const { state, currentFrame, updateDivisionIcon } = useProject();
   const division = currentFrame?.frameData.annotations.divisions.find((d) => d.id === divisionId);
   const filenames = Object.keys(state.assets).filter((f) => !isBlankAssetKey(f));
+  const frameCount = countFramesWithDivision(state, divisionId);
 
-  const [sourceFilename, setSourceFilename] = useState(division?.sourceFilename ?? filenames[0] ?? '');
+  const defaultSource =
+    division?.sourceFilename && filenames.includes(division.sourceFilename)
+      ? division.sourceFilename
+      : filenames[0] ?? '';
+
+  const [sourceFilename, setSourceFilename] = useState(defaultSource);
   const [crop, setCrop] = useState<DivisionCropRect>(
     division?.crop ?? { x: 0, y: 0, width: 64, height: 64 },
   );
   const [size, setSize] = useState(division?.size ?? DEFAULT_DIVISION_MARKER_SIZE);
   const [name, setName] = useState(division?.name?.trim() || 'Division');
+  const [applyToAllFrames, setApplyToAllFrames] = useState(frameCount > 1);
   const [img, setImg] = useState<HTMLImageElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; startCrop: DivisionCropRect } | null>(null);
@@ -28,11 +36,16 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
   useEffect(() => {
     if (division) {
       setName(division.name?.trim() || 'Division');
-      setSourceFilename(division.sourceFilename);
+      setSourceFilename(
+        division.sourceFilename && filenames.includes(division.sourceFilename)
+          ? division.sourceFilename
+          : filenames[0] ?? '',
+      );
       setCrop(division.crop);
       setSize(division.size);
+      setApplyToAllFrames(countFramesWithDivision(state, divisionId) > 1);
     }
-  }, [divisionId, division]);
+  }, [divisionId, division, filenames, state]);
 
   const sourceFile = sourceFilename
     ? state.fileRegistry[sourceFilename]?.file ?? null
@@ -176,15 +189,20 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
   };
 
   const handleSave = () => {
-    if (!division) return;
+    if (!division || !sourceFilename) return;
     const trimmed = name.trim();
     if (!trimmed) return;
-    void updateDivisionMarker(divisionId, {
-      name: trimmed,
-      sourceFilename,
-      crop,
-      size,
-    }).then(onClose);
+    const scope: DivisionIconScope = applyToAllFrames ? 'all_frames' : 'current_frame';
+    void updateDivisionIcon(
+      divisionId,
+      {
+        name: trimmed,
+        sourceFilename,
+        crop,
+        size,
+      },
+      scope,
+    ).then(onClose);
   };
 
   if (!division) return null;
@@ -193,7 +211,7 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
       <div className="panel w-full max-w-lg shadow-2xl">
         <div className="panel-header">
-          <span className="panel-title">Division icon crop</span>
+          <span className="panel-title">Division icon</span>
         </div>
         <div className="panel-inset flex flex-col gap-3 p-3">
           <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
@@ -213,22 +231,32 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
               value={sourceFilename}
               onChange={(e) => setSourceFilename(e.target.value)}
             >
-              {filenames.map((f) => (
-                <option key={f} value={f}>
-                  {displayFilename(f)}
-                </option>
-              ))}
+              {filenames.length === 0 ? (
+                <option value="">No images loaded</option>
+              ) : (
+                filenames.map((f) => (
+                  <option key={f} value={f}>
+                    {displayFilename(f)}
+                  </option>
+                ))
+              )}
             </select>
           </label>
           <div className="overflow-hidden rounded border border-border bg-[#0a0a0c]">
-            <canvas
-              ref={canvasRef}
-              className="max-h-[320px] w-full cursor-crosshair touch-none"
-              onPointerDown={onPointerDown}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerLeave={onPointerUp}
-            />
+            {img ? (
+              <canvas
+                ref={canvasRef}
+                className="max-h-[320px] w-full cursor-crosshair touch-none"
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerLeave={onPointerUp}
+              />
+            ) : (
+              <p className="px-3 py-8 text-center font-mono text-[9px] text-text-muted">
+                Select a source image to crop the division icon
+              </p>
+            )}
           </div>
           <label className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
             Marker size (px)
@@ -241,11 +269,32 @@ export function DivisionCropModal({ divisionId, onClose }: DivisionCropModalProp
               onChange={(e) => setSize(Number(e.target.value) || 48)}
             />
           </label>
+          {frameCount > 1 && (
+            <label className="flex items-start gap-2 font-mono text-[9px] text-text-muted">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={applyToAllFrames}
+                onChange={(e) => setApplyToAllFrames(e.target.checked)}
+              />
+              <span>
+                Apply icon to all {frameCount} timeline frames with this division
+                <span className="mt-0.5 block text-[8px] text-accent-cyan">
+                  Recommended for loaded Minecraft recordings (same player UUID on each frame)
+                </span>
+              </span>
+            </label>
+          )}
           <div className="flex justify-end gap-2">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="button" className="btn-primary" onClick={handleSave}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!sourceFilename}
+              onClick={handleSave}
+            >
               Save
             </button>
           </div>
