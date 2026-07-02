@@ -1,4 +1,4 @@
-import { ClipboardPaste, Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Trash2 } from 'lucide-react';
+import { ClipboardPaste, Hand, Hexagon, Link2, MapPin, MousePointer2, Plus, Shield, Skull, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
 import type { ToolMode } from '../../types/project';
@@ -19,6 +19,7 @@ interface CanvasToolbarProps {
 export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
   const {
     state,
+    currentFrame,
     setTool,
     setActiveColor,
     toggleCarryLabels,
@@ -30,6 +31,18 @@ export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
   } = useProject();
   const { tool, palette, activeColorId, carryOverLabels, selectedCountryId } = state;
   const activeFaction = palette.find((c) => c.id === activeColorId);
+  const selectedCountry = currentFrame?.frameData.annotations.countries.find(
+    (c) => c.id === selectedCountryId,
+  );
+  const territoryForActiveNation = currentFrame?.frameData.annotations.countries.find(
+    (c) => c.factionId === activeColorId,
+  );
+  const deleteTargetCountryId =
+    selectedCountry?.factionId === activeColorId
+      ? selectedCountry.id
+      : territoryForActiveNation?.id;
+  const nationLabel = activeFaction?.name ?? 'Nation';
+  const canDeleteTerritory = Boolean(deleteTargetCountryId);
   const [showAddNation, setShowAddNation] = useState(false);
 
   return (
@@ -59,6 +72,55 @@ export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
               {color.name.slice(0, 2).toUpperCase()}
             </button>
           ))}
+          {activeFaction && (
+            <>
+              <div className="mx-0.5 h-7 w-px bg-border" />
+              <button
+                type="button"
+                title={
+                  canDeleteTerritory
+                    ? `Remove ${nationLabel} territory on this frame only`
+                    : `${nationLabel} has no territory on this frame`
+                }
+                disabled={!canDeleteTerritory}
+                className="btn-icon h-7 w-7 hover:!text-accent-crimson disabled:opacity-40"
+                onClick={() => {
+                  if (!deleteTargetCountryId) return;
+                  if (
+                    confirm(`Remove ${nationLabel} territory from this frame only?`)
+                  ) {
+                    void deleteCountry(deleteTargetCountryId, 'current_frame');
+                    setSelectedCountry(null);
+                  }
+                }}
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                title={
+                  canDeleteTerritory
+                    ? `Remove ${nationLabel} territory from this frame and all later frames`
+                    : `${nationLabel} has no territory on this frame`
+                }
+                disabled={!canDeleteTerritory}
+                className="btn-icon h-7 w-7 hover:!text-accent-orange disabled:opacity-40"
+                onClick={() => {
+                  if (!deleteTargetCountryId) return;
+                  if (
+                    confirm(
+                      `Remove ${nationLabel} territory from this frame and every later timeline frame? Past frames are kept.`,
+                    )
+                  ) {
+                    void deleteCountry(deleteTargetCountryId, 'current_and_future');
+                    setSelectedCountry(null);
+                  }
+                }}
+              >
+                <Skull className="h-3 w-3" />
+              </button>
+            </>
+          )}
           <button
             type="button"
             title="Add faction"
@@ -116,21 +178,6 @@ export function CanvasToolbar({ onEditDivisionIcon }: CanvasToolbarProps) {
           </button>
         )}
 
-        {selectedCountryId && (
-          <button
-            type="button"
-            title="Delete selected territory"
-            className="btn-icon h-8 w-8 hover:!text-accent-crimson"
-            onClick={() => {
-              if (confirm('Delete this country and all its regions?')) {
-                deleteCountry(selectedCountryId);
-                setSelectedCountry(null);
-              }
-            }}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        )}
       </div>
 
       {tool === 'areaSelect' && activeFaction && (

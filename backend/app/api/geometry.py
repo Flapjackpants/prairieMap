@@ -38,8 +38,16 @@ def add_region(req: AddRegionRequest) -> ProjectMutationResponse:
 
 @router.post("/delete-country", response_model=ProjectMutationResponse)
 def delete_country(req: DeleteCountryRequest) -> ProjectMutationResponse:
-    project = project_service.delete_country(req.project, req.target, req.countryId)
-    return ProjectMutationResponse(project=project)
+    result = project_service.delete_country(
+        req.project,
+        req.target,
+        req.countryId,
+        req.scope,
+        req.fromTimelineIndex,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Country not found")
+    return ProjectMutationResponse(project=result)
 
 
 @router.post("/update-faction-metadata", response_model=ProjectMutationResponse)

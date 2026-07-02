@@ -193,7 +193,7 @@ interface ProjectContextValue {
     x: number,
     y: number,
   ) => Promise<void>;
-  deleteCountry: (countryId: string) => Promise<void>;
+  deleteCountry: (countryId: string, scope?: api.DeleteCountryScope) => Promise<void>;
   setSelectedCountry: (countryId: string | null) => void;
   setSelectedMarker: (markerId: string | null, kind: MarkerKind | null) => void;
   upsertMarkers: (cities: CityMarker[], divisions: DivisionMarker[]) => Promise<void>;
@@ -612,21 +612,26 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const deleteCountry = useCallback(
-    async (countryId: string) => {
+    async (countryId: string, scope: api.DeleteCountryScope = 'current_frame') => {
       const target = currentTarget(currentFrame);
       if (!target) return;
       await runMutation(() =>
         api.deleteCountry({
-          project: toProjectBody(stateRef.current),
+          project: projectBodyForMutation(),
           target,
           countryId,
+          scope,
+          fromTimelineIndex:
+            scope === 'current_and_future'
+              ? stateRef.current.currentTimelineIndex
+              : undefined,
         }),
       );
       if (stateRef.current.selectedCountryId === countryId) {
         dispatch({ type: 'SET_SELECTED_COUNTRY', countryId: null });
       }
     },
-    [currentFrame, runMutation],
+    [currentFrame, projectBodyForMutation, runMutation],
   );
 
   const setSelectedCountry = useCallback((countryId: string | null) => {
@@ -876,6 +881,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (isEditableTarget(e.target)) return;
+      if (document.querySelector('[role="dialog"]')) return;
+
+      if (e.key === 'PageDown') {
+        e.preventDefault();
+        void nextFrame();
+        return;
+      }
+      if (e.key === 'PageUp') {
+        e.preventDefault();
+        void prevFrame();
+        return;
+      }
+
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       if (e.key === 'z' && !e.shiftKey) {
@@ -900,7 +918,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [undo, redo, copyMarkers, pasteMarkers]);
+  }, [undo, redo, copyMarkers, pasteMarkers, nextFrame, prevFrame]);
 
   const updateFrameInfo = useCallback(
     async (info: Partial<FrameInfo>) => {

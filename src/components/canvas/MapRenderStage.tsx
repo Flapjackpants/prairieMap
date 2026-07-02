@@ -7,10 +7,8 @@ import type {
   PaletteColor,
   ProjectDisplaySettings,
 } from '../../types/project';
-import {
-  estimateEventLogLines,
-  formatEventLogForExport,
-} from '../../utils/formatEventLogExport';
+import { exportDossierMetrics } from '../../utils/dossierLayout';
+import { prepareDossierEventLog } from '../../utils/formatEventLogExport';
 import type { FrameRenderOptions } from '../../types/renderOptions';
 import { filterCountriesByVisibility } from '../../types/renderOptions';
 import { TerritoryFillsLayer } from './TerritoryFillsLayer';
@@ -41,44 +39,14 @@ interface MapRenderStageProps {
 }
 
 const DOSSIER_FONT = 'JetBrains Mono, monospace';
-const BODY_FONT_SIZE = 20;
-const DATE_FONT_SIZE = 26;
-const HEADER_FONT_SIZE = 14;
-const PANEL_PADDING = 20;
-
-function dossierPanelWidth(
-  stageWidth: number,
-  dateTitle: string,
-  eventLog: string,
-): number {
-  const eventBody = formatEventLogForExport(eventLog);
-  const hasDate = Boolean(dateTitle.trim());
-  const hasLog = Boolean(eventBody);
-  if (!hasDate && !hasLog) return 0;
-
-  const panelFraction = 0.4;
-  const minPanel = 100;
-  const maxPanel = Math.round(stageWidth * 0.48);
-  const innerWidth = Math.max(200, Math.round(stageWidth * panelFraction) - PANEL_PADDING * 2);
-  const charsPerLine = Math.max(12, Math.floor(innerWidth / (BODY_FONT_SIZE * 0.55)));
-  const bodyLines = estimateEventLogLines(eventBody, charsPerLine);
-
-  const linePx = BODY_FONT_SIZE * 1.35;
-  const wanted =
-    PANEL_PADDING * 2 +
-    (hasLog ? 28 : 0) +
-    (hasDate ? DATE_FONT_SIZE + 16 : 0) +
-    bodyLines * linePx;
-
-  return Math.min(maxPanel, Math.max(minPanel, Math.round(stageWidth * panelFraction), wanted));
-}
 
 export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderStageProps) {
-  const dateLabel = snapshot.dateTitle.trim().toUpperCase();
-  const eventBody = formatEventLogForExport(snapshot.eventLog);
-  const dossierContentW = dossierPanelWidth(snapshot.width, dateLabel, eventBody);
+  const dateLabel = snapshot.dateTitle.trim();
+  const dossier = exportDossierMetrics(snapshot.width, snapshot.height);
+  const eventBody = prepareDossierEventLog(snapshot.eventLog, dossier.charsPerLine);
+  const hasDossierContent = Boolean(dateLabel || eventBody);
   const panelW =
-    renderOptions.showDossier && dossierContentW > 0 ? dossierContentW : 0;
+    renderOptions.showDossier && hasDossierContent ? dossier.panelW : 0;
   const mapAreaW = snapshot.width - panelW;
   const panelX = mapAreaW;
 
@@ -89,10 +57,14 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
   const offsetX = (mapAreaW - snapshot.mapWidth * scale) / 2;
   const offsetY = (snapshot.height - snapshot.mapHeight * scale) / 2;
 
-  const textWidth = panelW - PANEL_PADDING * 2;
-  const headerY = PANEL_PADDING;
-  const dateY = headerY + (eventBody ? 30 : 0);
-  const bodyY = dateY + (dateLabel ? DATE_FONT_SIZE + 20 : 0);
+  const textWidth = panelW - dossier.padding * 2;
+  let cursorY = dossier.padding;
+  const dateBoxY = cursorY;
+  if (dateLabel) {
+    cursorY += dossier.dateFontSize + dossier.padding + 8;
+  }
+  const eventHeaderY = dateLabel ? cursorY : dossier.padding;
+  const eventBodyY = eventHeaderY + (eventBody ? dossier.headerFontSize + 8 : 0);
 
   const countries = filterCountriesByVisibility(
     snapshot.countries,
@@ -182,38 +154,37 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
               y={0}
               width={panelW}
               height={snapshot.height}
-              fill="rgba(16,18,20,0.94)"
+              fill="rgba(12,13,16,0.96)"
               listening={false}
             />
             <Rect
               x={panelX}
               y={0}
-              width={2}
+              width={1}
               height={snapshot.height}
               fill="#00e5ff"
-              opacity={0.4}
+              opacity={0.35}
               listening={false}
             />
-            {eventBody && (
-              <Text
-                x={panelX + PANEL_PADDING}
-                y={headerY}
-                text=":: EVENT_LOG ::"
-                fontSize={HEADER_FONT_SIZE}
-                fill="#8a8d94"
-                fontFamily={DOSSIER_FONT}
-                letterSpacing={1.5}
+            {dateLabel && (
+              <Rect
+                x={panelX + dossier.padding}
+                y={dateBoxY}
+                width={textWidth}
+                height={dossier.dateFontSize + dossier.padding}
+                stroke="rgba(0,229,255,0.35)"
+                strokeWidth={1}
                 listening={false}
               />
             )}
             {dateLabel && (
               <Text
-                x={panelX + PANEL_PADDING}
-                y={dateY}
-                width={textWidth}
+                x={panelX + dossier.padding + 6}
+                y={dateBoxY + 5}
+                width={textWidth - 12}
                 text={dateLabel}
-                fontSize={DATE_FONT_SIZE}
-                fill="#ff6b00"
+                fontSize={dossier.dateFontSize}
+                fill="#e8eaed"
                 fontStyle="bold"
                 fontFamily={DOSSIER_FONT}
                 wrap="word"
@@ -221,18 +192,44 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
               />
             )}
             {eventBody && (
-              <Text
-                x={panelX + PANEL_PADDING}
-                y={bodyY}
-                width={textWidth}
-                text={eventBody}
-                fontSize={BODY_FONT_SIZE}
-                lineHeight={1.35}
-                fill="rgba(0,229,255,0.95)"
-                fontFamily={DOSSIER_FONT}
-                wrap="word"
-                listening={false}
-              />
+              <>
+                <Text
+                  x={panelX + dossier.padding}
+                  y={eventHeaderY}
+                  text=":: EVENT_LOG ::"
+                  fontSize={dossier.headerFontSize}
+                  fill="#6b6f78"
+                  fontFamily={DOSSIER_FONT}
+                  letterSpacing={1}
+                  listening={false}
+                />
+                <Rect
+                  x={panelX + dossier.padding}
+                  y={eventBodyY - 4}
+                  width={textWidth}
+                  height={Math.max(
+                    48,
+                    snapshot.height - eventBodyY - dossier.padding,
+                  )}
+                  stroke="rgba(0,229,255,0.22)"
+                  strokeWidth={1}
+                  fill="rgba(0,229,255,0.03)"
+                  listening={false}
+                />
+                <Text
+                  x={panelX + dossier.padding + 6}
+                  y={eventBodyY + 2}
+                  width={textWidth - 12}
+                  height={snapshot.height - eventBodyY - dossier.padding - 8}
+                  text={eventBody}
+                  fontSize={dossier.bodyFontSize}
+                  lineHeight={dossier.lineHeight}
+                  fill="rgba(0,229,255,0.92)"
+                  fontFamily={DOSSIER_FONT}
+                  wrap="word"
+                  listening={false}
+                />
+              </>
             )}
           </>
         )}

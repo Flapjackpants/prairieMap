@@ -57,10 +57,14 @@ export async function addTerritoryRegion(params: {
   });
 }
 
+export type DeleteCountryScope = 'current_frame' | 'current_and_future';
+
 export async function deleteCountry(params: {
   project: ProjectBody;
   target: { filename: string; copyIndex: number };
   countryId: string;
+  scope?: DeleteCountryScope;
+  fromTimelineIndex?: number;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/geometry/delete-country', {
     method: 'POST',

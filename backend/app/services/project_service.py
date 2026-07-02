@@ -469,23 +469,93 @@ def paste_territory_from_frame(
     return project.model_copy(update={"assets": assets})
 
 
-def delete_country(project: ProjectBody, target: AssetTarget, country_id: str) -> ProjectBody:
-    assets = update_asset_at(
-        project.assets,
+def _filter_country_from_frame(
+    assets: dict[str, list[AssetFrameState]],
+    target: AssetTarget,
+    country_id: str,
+) -> tuple[dict[str, list[AssetFrameState]], bool]:
+    frame_state = get_asset_state(assets, target.filename, target.copyIndex)
+    filtered = [c for c in frame_state.annotations.countries if c.id != country_id]
+    if len(filtered) == len(frame_state.annotations.countries):
+        return assets, False
+    next_assets = update_asset_at(
+        assets,
         target,
         lambda s: s.model_copy(
             update={
-                "annotations": s.annotations.model_copy(
-                    update={
-                        "countries": [
-                            c for c in s.annotations.countries if c.id != country_id
-                        ]
-                    }
-                )
+                "annotations": s.annotations.model_copy(update={"countries": filtered})
             }
         ),
     )
-    return project.model_copy(update={"assets": assets})
+    return next_assets, True
+
+
+def _filter_faction_from_frame(
+    assets: dict[str, list[AssetFrameState]],
+    target: AssetTarget,
+    faction_id: str,
+) -> tuple[dict[str, list[AssetFrameState]], bool]:
+    frame_state = get_asset_state(assets, target.filename, target.copyIndex)
+    filtered = [c for c in frame_state.annotations.countries if c.factionId != faction_id]
+    if len(filtered) == len(frame_state.annotations.countries):
+        return assets, False
+    next_assets = update_asset_at(
+        assets,
+        target,
+        lambda s: s.model_copy(
+            update={
+                "annotations": s.annotations.model_copy(update={"countries": filtered})
+            }
+        ),
+    )
+    return next_assets, True
+
+
+def delete_country(
+    project: ProjectBody,
+    target: AssetTarget,
+    country_id: str,
+    scope: str = "current_frame",
+    from_timeline_index: int | None = None,
+) -> ProjectBody | None:
+    if scope == "current_frame":
+        assets, changed = _filter_country_from_frame(
+            {k: list(v) for k, v in project.assets.items()},
+            target,
+            country_id,
+        )
+        if not changed:
+            return None
+        return project.model_copy(update={"assets": assets})
+
+    if scope == "current_and_future":
+        frame_state = get_asset_state(project.assets, target.filename, target.copyIndex)
+        country = next(
+            (c for c in frame_state.annotations.countries if c.id == country_id),
+            None,
+        )
+        if country is None:
+            return None
+
+        faction_id = country.factionId
+        found = False
+        assets = {k: list(v) for k, v in project.assets.items()}
+        start_idx = (
+            from_timeline_index
+            if from_timeline_index is not None
+            else project.currentTimelineIndex
+        )
+        start_idx = clamp_timeline_index(start_idx, len(project.timeline))
+        for entry in project.timeline[start_idx:]:
+            target_entry = AssetTarget(filename=entry.filename, copyIndex=entry.copyIndex)
+            assets, changed = _filter_faction_from_frame(assets, target_entry, faction_id)
+            if changed:
+                found = True
+        if not found:
+            return None
+        return project.model_copy(update={"assets": assets})
+
+    return None
 
 
 def _with_visited_timeline(project: ProjectBody, entry_id: str) -> list[str]:

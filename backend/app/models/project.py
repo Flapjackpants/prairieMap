@@ -157,6 +157,8 @@ class DeleteCountryRequest(BaseModel):
     project: ProjectBody
     target: AssetTarget
     countryId: str
+    scope: Literal["current_frame", "current_and_future"] = "current_frame"
+    fromTimelineIndex: int | None = None
 
 
 class DuplicateFrameRequest(BaseModel):
