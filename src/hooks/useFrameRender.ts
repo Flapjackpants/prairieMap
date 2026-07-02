@@ -8,6 +8,7 @@ import type { FrameRenderOptions } from '../types/renderOptions';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { acquire } from '../utils/mapImageCache';
 import { preloadDivisionImages, preloadFlagImages, waitForExportPaint } from '../utils/exportCapture';
+import { downloadBlob } from '../utils/downloadBlob';
 
 const MAX_EXPORT_DIMENSION = 1920;
 
@@ -30,15 +31,6 @@ function evenExportDimensions(width: number, height: number) {
   exportW = Math.max(2, exportW - (exportW % 2));
   exportH = Math.max(2, exportH - (exportH % 2));
   return { exportW, exportH };
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }
 
 export function useFrameRender() {

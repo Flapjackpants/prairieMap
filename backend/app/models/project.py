@@ -194,6 +194,13 @@ class DeleteTimelineEntryRequest(BaseModel):
     index: int
 
 
+class AutoFillTimelineDatesRequest(BaseModel):
+    project: ProjectBody
+    startAt: str
+    framesPerStep: int = 6
+    minutesPerStep: int = 1
+
+
 class UpdateFactionMetadataRequest(BaseModel):
     project: ProjectBody
     factionId: str

@@ -1,6 +1,7 @@
 import type { FrameDuplicateOptions, FactionStat, PolygonRing } from '../types/project';
 import type { ProjectBody } from '../types/projectBody';
-import { apiFetch } from './client';
+import { apiFetch, formatFetchFailure, getDirectApiBase } from './client';
+import { packFrames } from '../utils/framePack';
 
 export interface ProjectMutationResponse {
   project: ProjectBody;
@@ -236,6 +237,18 @@ export async function deleteTimelineEntry(
   });
 }
 
+export async function autoFillTimelineDates(params: {
+  project: ProjectBody;
+  startAt: string;
+  framesPerStep: number;
+  minutesPerStep: number;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/timeline/auto-fill-dates', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
 export async function duplicateFrame(params: {
   project: ProjectBody;
   sourceIndex: number;
@@ -289,13 +302,17 @@ export async function compileVideo(
   if (frameDurations && frameDurations.length === frames.length) {
     form.append('frame_durations', JSON.stringify(frameDurations));
   }
-  frames.forEach((blob, i) => {
-    form.append('frames', blob, `frame_${String(i).padStart(4, '0')}.png`);
-  });
-  const res = await fetch('/api/video/compile', {
-    method: 'POST',
-    body: form,
-  });
+  const packed = await packFrames(frames);
+  form.append('frame_pack', packed, 'frames.pmfp');
+  let res: Response;
+  try {
+    res = await fetch(`${getDirectApiBase()}/video/compile`, {
+      method: 'POST',
+      body: form,
+    });
+  } catch (error) {
+    throw new Error(formatFetchFailure(error, 'Video compile'));
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
@@ -309,5 +326,9 @@ export async function compileVideo(
     }
     throw new Error(detail);
   }
-  return res.blob();
+  const data = await res.arrayBuffer();
+  if (data.byteLength === 0) {
+    throw new Error('Video encode returned an empty file — is ffmpeg installed?');
+  }
+  return new Blob([data], { type: 'video/mp4' });
 }

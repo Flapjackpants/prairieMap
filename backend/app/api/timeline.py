@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException
 
 from app.models.project import (
     AppendRecordedFrameRequest,
+    AutoFillTimelineDatesRequest,
     DeleteTimelineEntryRequest,
     DuplicateFrameRequest,
     InitFilenamesRequest,
@@ -67,4 +70,22 @@ def reconcile(req: ReconcileRequest) -> ProjectMutationResponse:
 @router.post("/init-from-filenames", response_model=ProjectMutationResponse)
 def init_from_filenames(req: InitFilenamesRequest) -> ProjectMutationResponse:
     project = project_service.init_from_filenames(req.filenames)
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/auto-fill-dates", response_model=ProjectMutationResponse)
+def auto_fill_timeline_dates(req: AutoFillTimelineDatesRequest) -> ProjectMutationResponse:
+    try:
+        start_at = datetime.fromisoformat(req.startAt)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid startAt: {e!s}") from e
+    try:
+        project = project_service.auto_fill_timeline_dates(
+            req.project,
+            start_at,
+            req.framesPerStep,
+            req.minutesPerStep,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return ProjectMutationResponse(project=project)

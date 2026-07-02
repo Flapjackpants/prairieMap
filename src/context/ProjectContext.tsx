@@ -30,6 +30,7 @@ import {
 import type { ProjectDisplaySettings } from '../types/displaySettings';
 import { DEFAULT_DISPLAY_SETTINGS } from '../types/displaySettings';
 import { mergeServerProject, toProjectBody, type ProjectBody } from '../types/projectBody';
+import { toIsoLocalDateTime } from '../utils/timelineDates';
 import { getNextMapFilename } from '../utils/projectHelpers';
 import {
   buildFileRegistry,
@@ -219,6 +220,11 @@ interface ProjectContextValue {
   pasteMarkers: () => Promise<void>;
   hasMarkerClipboard: boolean;
   updateFrameInfo: (info: Partial<FrameInfo>) => Promise<void>;
+  autoFillTimelineDates: (config: {
+    startAt: Date;
+    framesPerStep: number;
+    minutesPerStep: number;
+  }) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => Promise<void>;
   updateFactionMetadata: (
     factionId: string,
@@ -400,7 +406,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
       } catch {
         if (!cancelled) {
-          setApiError('Backend unavailable. Start API: cd backend && uvicorn app.main:app --reload');
+          setApiError('Backend unavailable. Run: npm run dev:all');
           setApiReady(false);
         }
       }
@@ -913,6 +919,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     [currentFrame, runMutation],
   );
 
+  const autoFillTimelineDates = useCallback(
+    async (config: { startAt: Date; framesPerStep: number; minutesPerStep: number }) => {
+      if (stateRef.current.timeline.length === 0) return;
+      await runMutation(() =>
+        api.autoFillTimelineDates({
+          project: projectBodyForMutation(),
+          startAt: toIsoLocalDateTime(config.startAt),
+          framesPerStep: config.framesPerStep,
+          minutesPerStep: config.minutesPerStep,
+        }),
+      );
+    },
+    [projectBodyForMutation, runMutation],
+  );
+
   const addPaletteColor = useCallback(
     async (name: string, hex: string) => {
       const prevIds = new Set(stateRef.current.palette.map((p) => p.id));
@@ -1109,6 +1130,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       pasteMarkers,
       hasMarkerClipboard,
       updateFrameInfo,
+      autoFillTimelineDates,
       addPaletteColor,
       updateFactionMetadata,
       exportProject,
@@ -1165,6 +1187,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       pasteMarkers,
       hasMarkerClipboard,
       updateFrameInfo,
+      autoFillTimelineDates,
       addPaletteColor,
       updateFactionMetadata,
       exportProject,

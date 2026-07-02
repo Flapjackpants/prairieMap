@@ -652,7 +652,6 @@ export function MapCanvas() {
                     />
                   </>
                 )}
-                <TerritoryLabelsLayer countries={countries} showLabels={showTerritoryLabels} />
               </Layer>
 
               <Layer>
@@ -665,6 +664,7 @@ export function MapCanvas() {
                   flagImageMap={flagImageMap}
                   onSelectCountry={handleSelectCountry}
                 />
+                <TerritoryLabelsLayer countries={countries} showLabels={showTerritoryLabels} />
                 {isPlacementTool && (
                   <Rect
                     width={canvasWidth}

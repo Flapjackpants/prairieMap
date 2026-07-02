@@ -8,10 +8,13 @@ import {
 interface ExportVideoModalProps {
   frameCount: number;
   isExporting: boolean;
+  exportComplete: boolean;
   progress: number;
   captureLabel?: string | null;
   error: string | null;
+  saveMessage: string | null;
   onConfirm: (secondsPerFrame: number, divisionMotionFps: number) => void;
+  onSave: () => void;
   onCancel: () => void;
   onClose: () => void;
 }
@@ -19,10 +22,13 @@ interface ExportVideoModalProps {
 export function ExportVideoModal({
   frameCount,
   isExporting,
+  exportComplete,
   progress,
   captureLabel,
   error,
+  saveMessage,
   onConfirm,
+  onSave,
   onCancel,
   onClose,
 }: ExportVideoModalProps) {
@@ -116,6 +122,22 @@ export function ExportVideoModal({
           {error && (
             <p className="font-mono text-[9px] text-accent-orange uppercase">{error}</p>
           )}
+
+          {exportComplete && !error && (
+            <div className="rounded border border-accent-cyan/40 bg-accent-cyan/5 p-2">
+              <p className="font-mono text-[9px] text-accent-cyan uppercase">
+                Video ready
+              </p>
+              {saveMessage && (
+                <p className="mt-1 font-mono text-[8px] leading-snug text-text-muted">
+                  {saveMessage}
+                </p>
+              )}
+              <p className="mt-1 font-mono text-[8px] leading-snug text-text-muted">
+                If nothing appeared in Downloads, click Save MP4 to choose where to save it.
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-metal-shadow px-4 py-3">
@@ -123,6 +145,15 @@ export function ExportVideoModal({
             <button type="button" className="btn-ghost" onClick={onCancel}>
               Abort
             </button>
+          ) : exportComplete ? (
+            <>
+              <button type="button" className="btn-ghost" onClick={onClose}>
+                Close
+              </button>
+              <button type="button" className="btn-primary" onClick={onSave}>
+                Save MP4
+              </button>
+            </>
           ) : (
             <>
               <button type="button" className="btn-ghost" onClick={onClose}>

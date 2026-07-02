@@ -2,12 +2,14 @@ import type Konva from 'konva';
 import { useCallback, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { compileVideo } from '../api/backend';
+import { formatFetchFailure } from '../api/client';
 import { DEFAULT_SECONDS_PER_FRAME } from '../constants/playback';
 import type { ExportFrameSnapshot } from '../components/canvas/ExportFrameStage';
 import { useProject } from '../context/ProjectContext';
 import type { DivisionMarker, ProjectState } from '../types/project';
 import { resolveTimelineEntry } from '../utils/projectHelpers';
 import { isBlankAssetKey } from '../types/project';
+import { downloadBlob, saveBlobToDisk } from '../utils/downloadBlob';
 import { preloadDivisionImages, preloadFlagImages, waitForExportPaint } from '../utils/exportCapture';
 import { acquire } from '../utils/mapImageCache';
 import {
@@ -49,6 +51,31 @@ export function useVideoExport() {
   const abortRef = useRef(false);
   const divisionImagesRef = useRef<Record<string, HTMLImageElement>>({});
   const flagImagesRef = useRef<Record<string, HTMLImageElement>>({});
+  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
+  const [exportComplete, setExportComplete] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  const clearPendingExport = useCallback(() => {
+    pendingVideoRef.current = null;
+    setExportComplete(false);
+    setSaveMessage(null);
+  }, []);
+
+  const savePendingVideo = useCallback(async () => {
+    const pending = pendingVideoRef.current;
+    if (!pending) return;
+    setSaveMessage(null);
+    try {
+      const result = await saveBlobToDisk(pending.blob, pending.filename);
+      if (result === 'saved') {
+        setSaveMessage('Video saved to the location you chose.');
+      } else if (result === 'downloaded') {
+        setSaveMessage('Download started — check your Downloads folder.');
+      }
+    } catch (e) {
+      setSaveMessage(e instanceof Error ? e.message : 'Could not save video');
+    }
+  }, []);
 
   const runExport = useCallback(
     async (
@@ -66,6 +93,7 @@ export function useVideoExport() {
       setError(null);
       setProgress(0);
       setCaptureLabel(null);
+      clearPendingExport();
 
       const savedIndex = state.currentTimelineIndex;
       const blobs: Blob[] = [];
@@ -118,7 +146,8 @@ export function useVideoExport() {
           return new Promise<Blob>((resolve, reject) => {
             canvas.toBlob(
               (b) => (b ? resolve(b) : reject(new Error('Failed to capture frame'))),
-              'image/png',
+              'image/jpeg',
+              0.92,
             );
           });
         };
@@ -246,15 +275,24 @@ export function useVideoExport() {
         setProgress(95);
         setCaptureLabel('Encoding video…');
         const mp4 = await compileVideo(blobs, secondsPerFrame, frameDurations);
-        const url = URL.createObjectURL(mp4);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `prairiemap-${Date.now()}.mp4`;
-        a.click();
-        URL.revokeObjectURL(url);
+        if (mp4.size === 0) {
+          throw new Error('Video encode returned an empty file — is ffmpeg installed?');
+        }
+
+        const filename = `prairiemap-${Date.now()}.mp4`;
+        pendingVideoRef.current = { blob: mp4, filename };
+        setExportComplete(true);
         setProgress(100);
+        setCaptureLabel('Export complete');
+
+        try {
+          downloadBlob(mp4, filename);
+          setSaveMessage('Download started — check your Downloads folder.');
+        } catch {
+          setSaveMessage('Click “Save MP4” below to download the video.');
+        }
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Video export failed');
+        setError(formatFetchFailure(e, 'Video export failed'));
       } finally {
         setSnapshot(null);
         setCaptureLabel(null);
@@ -262,21 +300,26 @@ export function useVideoExport() {
         void savedIndex;
       }
     },
-    [state],
+    [state, clearPendingExport],
   );
 
   const cancel = useCallback(() => {
     abortRef.current = true;
-  }, []);
+    clearPendingExport();
+  }, [clearPendingExport]);
 
   return {
     isExporting,
     progress,
     captureLabel,
     error,
+    exportComplete,
+    saveMessage,
     snapshot,
     stageRef,
     runExport,
+    savePendingVideo,
+    clearPendingExport,
     cancel,
   };
 }

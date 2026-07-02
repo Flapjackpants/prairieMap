@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  CalendarClock,
   Camera,
   ChevronFirst,
   ChevronLast,
@@ -14,6 +15,7 @@ import { useProject } from '../../context/ProjectContext';
 import { usePlayback } from '../../hooks/usePlayback';
 import { useVideoExport } from '../../hooks/useVideoExport';
 import { useFrameRender } from '../../hooks/useFrameRender';
+import { AutoDateModal } from './AutoDateModal';
 import { ExportFrameStage } from './ExportFrameStage';
 import { ExportVideoModal } from './ExportVideoModal';
 import { GenerateRenderModal } from './GenerateRenderModal';
@@ -22,7 +24,8 @@ import { MinecraftRecordModal } from './MinecraftRecordModal';
 import { useMinecraftRecording } from '../../context/MinecraftRecordingContext';
 
 export function PlaybackControls() {
-  const { state, setTimelineIndex, nextFrame, prevFrame, apiReady } = useProject();
+  const { state, currentFrame, setTimelineIndex, nextFrame, prevFrame, apiReady, autoFillTimelineDates } =
+    useProject();
   const { openModal } = useMinecraftRecording();
   const { timeline, currentTimelineIndex } = state;
   const { isPlaying, canPlay, togglePlay, goToStart, goToEnd } = usePlayback();
@@ -30,6 +33,7 @@ export function PlaybackControls() {
   const frameRender = useFrameRender();
   const [showExportModal, setShowExportModal] = useState(false);
   const [showRenderModal, setShowRenderModal] = useState(false);
+  const [showAutoDateModal, setShowAutoDateModal] = useState(false);
 
   const hasFrames = timeline.length > 0;
 
@@ -57,19 +61,23 @@ export function PlaybackControls() {
         <ExportVideoModal
           frameCount={timeline.length}
           isExporting={video.isExporting}
+          exportComplete={video.exportComplete}
           progress={video.progress}
           captureLabel={video.captureLabel}
           error={video.error}
+          saveMessage={video.saveMessage}
           onConfirm={(seconds, divisionMotionFps) => {
-            void video
-              .runExport(seconds, divisionMotionFps)
-              .finally(() => setShowExportModal(false));
+            void video.runExport(seconds, divisionMotionFps);
           }}
+          onSave={() => void video.savePendingVideo()}
           onCancel={() => {
             video.cancel();
             setShowExportModal(false);
           }}
-          onClose={() => setShowExportModal(false)}
+          onClose={() => {
+            video.clearPendingExport();
+            setShowExportModal(false);
+          }}
         />
       )}
 
@@ -81,6 +89,17 @@ export function PlaybackControls() {
             void frameRender.runRender(options).finally(() => setShowRenderModal(false));
           }}
           onClose={() => setShowRenderModal(false)}
+        />
+      )}
+
+      {showAutoDateModal && (
+        <AutoDateModal
+          frameCount={timeline.length}
+          initialDateTitle={currentFrame?.frameData.info.dateTitle}
+          onConfirm={(config) => {
+            void autoFillTimelineDates(config).finally(() => setShowAutoDateModal(false));
+          }}
+          onClose={() => setShowAutoDateModal(false)}
         />
       )}
 
@@ -202,6 +221,21 @@ export function PlaybackControls() {
                 ? `${String(currentTimelineIndex + 1).padStart(2, '0')}/${String(timeline.length).padStart(2, '0')}`
                 : 'NO_DATA'}
             </span>
+            <button
+              type="button"
+              className="btn-icon h-7 w-7 shrink-0"
+              disabled={!hasFrames || !apiReady}
+              title="Auto-fill Date_Era on all frames"
+              onClick={() => {
+                if (!apiReady) {
+                  alert('Start the API server: npm run dev:api (or npm run dev:all)');
+                  return;
+                }
+                setShowAutoDateModal(true);
+              }}
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+            </button>
             {isPlaying && <span className="led led-on shrink-0" title="Playing" aria-hidden />}
           </div>
         </div>

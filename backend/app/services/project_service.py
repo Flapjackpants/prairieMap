@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 
 from app.models.project import (
     BLANK_ASSET_PREFIX,
@@ -725,6 +726,46 @@ def update_faction_metadata(
             )
         assets[filename] = new_copies
     return project.model_copy(update={"palette": palette, "assets": assets})
+
+
+def format_timeline_date_title(dt: datetime) -> str:
+    month = dt.month
+    day = dt.day
+    year = dt.year % 100
+    hour24 = dt.hour
+    minute = dt.minute
+    ampm = "pm" if hour24 >= 12 else "am"
+    hour12 = hour24 % 12 or 12
+    return f"{month}/{day}/{year}, {hour12}:{minute:02d}{ampm}"
+
+
+def auto_fill_timeline_dates(
+    project: ProjectBody,
+    start_at: datetime,
+    frames_per_step: int,
+    minutes_per_step: int,
+) -> ProjectBody:
+    if frames_per_step < 1:
+        raise ValueError("framesPerStep must be at least 1")
+    if minutes_per_step < 0:
+        raise ValueError("minutesPerStep must be non-negative")
+
+    assets = {k: list(v) for k, v in project.assets.items()}
+    for index, entry in enumerate(project.timeline):
+        step = index // frames_per_step
+        dt = start_at + timedelta(minutes=step * minutes_per_step)
+        date_title = format_timeline_date_title(dt)
+        target = AssetTarget(filename=entry.filename, copyIndex=entry.copyIndex)
+        frame_state = get_asset_state(assets, target.filename, target.copyIndex)
+        updated = frame_state.model_copy(
+            update={"info": frame_state.info.model_copy(update={"dateTitle": date_title})}
+        )
+        copies = list(assets.get(target.filename, []))
+        while len(copies) <= target.copyIndex:
+            copies.append(create_empty_asset_state())
+        copies[target.copyIndex] = updated
+        assets[target.filename] = copies
+    return project.model_copy(update={"assets": assets})
 
 
 def update_frame_info(
