@@ -21,7 +21,13 @@ describe('clampDisplaySettings', () => {
       territoryBorderWidth: 0.5,
       cityMarkerStrokeWidth: 3,
       territoryDisplayMode: 'color',
+      syncEventLogsByDate: false,
     });
+  });
+
+  it('reads the syncEventLogsByDate flag', () => {
+    expect(clampDisplaySettings({ syncEventLogsByDate: true }).syncEventLogsByDate).toBe(true);
+    expect(clampDisplaySettings({}).syncEventLogsByDate).toBe(false);
   });
 
   it('accepts flag display mode', () => {

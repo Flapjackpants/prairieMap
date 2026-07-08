@@ -246,8 +246,18 @@ export async function autoFillTimelineDates(params: {
   startAt: string;
   framesPerStep: number;
   minutesPerStep: number;
+  syncEventLog: boolean;
 }): Promise<ProjectMutationResponse> {
   return apiFetch('/timeline/auto-fill-dates', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function syncEventLogsByDate(params: {
+  project: ProjectBody;
+}): Promise<ProjectMutationResponse> {
+  return apiFetch('/timeline/sync-event-logs', {
     method: 'POST',
     body: JSON.stringify(params),
   });

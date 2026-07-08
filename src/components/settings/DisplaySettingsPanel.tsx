@@ -60,7 +60,7 @@ function NumberRow({
 }
 
 export function DisplaySettingsPanel() {
-  const { state, updateDisplaySettings } = useProject();
+  const { state, updateDisplaySettings, setSyncEventLogsByDate } = useProject();
   const settings = state.displaySettings;
 
   const commit = (patch: Partial<ProjectDisplaySettings>) => {
@@ -111,6 +111,20 @@ export function DisplaySettingsPanel() {
             <option value="color">Color + labels</option>
             <option value="flag">Flag fill</option>
           </select>
+        </label>
+        <label className="flex items-start gap-2 font-mono text-[9px] tracking-widest text-text-muted uppercase">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={settings.syncEventLogsByDate}
+            onChange={(e) => void setSyncEventLogsByDate(e.target.checked)}
+          />
+          <span className="leading-snug">
+            Sync event logs by date
+            <span className="mt-0.5 block normal-case tracking-normal text-text-muted/70">
+              Frames sharing a Date_Era keep the same Event Log everywhere, incl. export.
+            </span>
+          </span>
         </label>
         <button
           type="button"

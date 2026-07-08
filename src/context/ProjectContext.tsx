@@ -183,6 +183,7 @@ interface ProjectContextValue {
   setActiveColor: (colorId: string) => void;
   toggleCarryLabels: () => void;
   updateDisplaySettings: (settings: ProjectDisplaySettings) => void;
+  setSyncEventLogsByDate: (enabled: boolean) => Promise<void>;
   addTerritoryRegion: (region: PolygonRing) => Promise<void>;
   claimAnchor: (x: number, y: number) => Promise<void>;
   removeTerritoryVertex: (countryId: string, ringIndex: number, vertexIndex: number) => Promise<void>;
@@ -224,6 +225,7 @@ interface ProjectContextValue {
     startAt: Date;
     framesPerStep: number;
     minutesPerStep: number;
+    syncEventLog: boolean;
   }) => Promise<void>;
   addPaletteColor: (name: string, hex: string) => Promise<void>;
   updateFactionMetadata: (
@@ -526,6 +528,23 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const updateDisplaySettings = useCallback((displaySettings: ProjectDisplaySettings) => {
     dispatch({ type: 'SET_DISPLAY_SETTINGS', displaySettings });
   }, []);
+
+  const setSyncEventLogsByDate = useCallback(
+    async (enabled: boolean) => {
+      const next: ProjectDisplaySettings = {
+        ...stateRef.current.displaySettings,
+        syncEventLogsByDate: enabled,
+      };
+      dispatch({ type: 'SET_DISPLAY_SETTINGS', displaySettings: next });
+      if (!enabled || stateRef.current.timeline.length === 0) return;
+      const project: ProjectBody = {
+        ...toProjectBody(stateRef.current),
+        displaySettings: next,
+      };
+      await runMutation(() => api.syncEventLogsByDate({ project }));
+    },
+    [runMutation],
+  );
 
   const addTerritoryRegion = useCallback(
     async (region: PolygonRing) => {
@@ -938,14 +957,27 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   );
 
   const autoFillTimelineDates = useCallback(
-    async (config: { startAt: Date; framesPerStep: number; minutesPerStep: number }) => {
+    async (config: {
+      startAt: Date;
+      framesPerStep: number;
+      minutesPerStep: number;
+      syncEventLog: boolean;
+    }) => {
       if (stateRef.current.timeline.length === 0) return;
+      const base = projectBodyForMutation();
+      const project: ProjectBody = config.syncEventLog
+        ? {
+            ...base,
+            displaySettings: { ...base.displaySettings, syncEventLogsByDate: true },
+          }
+        : base;
       await runMutation(() =>
         api.autoFillTimelineDates({
-          project: projectBodyForMutation(),
+          project,
           startAt: toIsoLocalDateTime(config.startAt),
           framesPerStep: config.framesPerStep,
           minutesPerStep: config.minutesPerStep,
+          syncEventLog: config.syncEventLog,
         }),
       );
     },
@@ -1124,6 +1156,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setActiveColor,
       toggleCarryLabels,
       updateDisplaySettings,
+      setSyncEventLogsByDate,
       addTerritoryRegion,
       claimAnchor,
       removeTerritoryVertex,
@@ -1181,6 +1214,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       setActiveColor,
       toggleCarryLabels,
       updateDisplaySettings,
+      setSyncEventLogsByDate,
       addTerritoryRegion,
       claimAnchor,
       removeTerritoryVertex,

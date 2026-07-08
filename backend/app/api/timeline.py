@@ -14,6 +14,7 @@ from app.models.project import (
     ReconcileRequest,
     ReorderTimelineRequest,
     SetTimelineIndexRequest,
+    SyncEventLogsRequest,
 )
 from app.services import project_service
 
@@ -85,7 +86,14 @@ def auto_fill_timeline_dates(req: AutoFillTimelineDatesRequest) -> ProjectMutati
             start_at,
             req.framesPerStep,
             req.minutesPerStep,
+            req.syncEventLog,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+    return ProjectMutationResponse(project=project)
+
+
+@router.post("/sync-event-logs", response_model=ProjectMutationResponse)
+def sync_event_logs(req: SyncEventLogsRequest) -> ProjectMutationResponse:
+    project = project_service.sync_event_logs_by_date(req.project)
     return ProjectMutationResponse(project=project)

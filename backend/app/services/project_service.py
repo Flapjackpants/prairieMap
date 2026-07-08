@@ -814,6 +814,7 @@ def auto_fill_timeline_dates(
     start_at: datetime,
     frames_per_step: int,
     minutes_per_step: int,
+    sync_event_log: bool = False,
 ) -> ProjectBody:
     if frames_per_step < 1:
         raise ValueError("framesPerStep must be at least 1")
@@ -821,20 +822,55 @@ def auto_fill_timeline_dates(
         raise ValueError("minutesPerStep must be non-negative")
 
     assets = {k: list(v) for k, v in project.assets.items()}
+    # When syncing the event log, every frame that shares a date (i.e. falls in
+    # the same step) should carry the event log of the first frame in that step.
+    step_event_logs: dict[int, str] = {}
     for index, entry in enumerate(project.timeline):
         step = index // frames_per_step
         dt = start_at + timedelta(minutes=step * minutes_per_step)
         date_title = format_timeline_date_title(dt)
         target = AssetTarget(filename=entry.filename, copyIndex=entry.copyIndex)
         frame_state = get_asset_state(assets, target.filename, target.copyIndex)
+        info_update: dict = {"dateTitle": date_title}
+        if sync_event_log:
+            if step not in step_event_logs:
+                step_event_logs[step] = frame_state.info.description
+            info_update["description"] = step_event_logs[step]
         updated = frame_state.model_copy(
-            update={"info": frame_state.info.model_copy(update={"dateTitle": date_title})}
+            update={"info": frame_state.info.model_copy(update=info_update)}
         )
         copies = list(assets.get(target.filename, []))
         while len(copies) <= target.copyIndex:
             copies.append(create_empty_asset_state())
         copies[target.copyIndex] = updated
         assets[target.filename] = copies
+    return project.model_copy(update={"assets": assets})
+
+
+def sync_event_logs_by_date(project: ProjectBody) -> ProjectBody:
+    """Make every frame that shares a (non-empty) Date_Era carry the same event
+    log. The first frame of each date group (in timeline order) is the source."""
+    assets = {k: list(v) for k, v in project.assets.items()}
+    source_by_date: dict[str, str] = {}
+    for entry in project.timeline:
+        frame_state = get_asset_state(assets, entry.filename, entry.copyIndex)
+        date_title = frame_state.info.dateTitle.strip()
+        if not date_title:
+            continue
+        if date_title not in source_by_date:
+            source_by_date[date_title] = frame_state.info.description
+            continue
+        description = source_by_date[date_title]
+        if frame_state.info.description == description:
+            continue
+        updated = frame_state.model_copy(
+            update={"info": frame_state.info.model_copy(update={"description": description})}
+        )
+        copies = list(assets.get(entry.filename, []))
+        while len(copies) <= entry.copyIndex:
+            copies.append(create_empty_asset_state())
+        copies[entry.copyIndex] = updated
+        assets[entry.filename] = copies
     return project.model_copy(update={"assets": assets})
 
 
@@ -854,4 +890,42 @@ def update_frame_info(
         return s.model_copy(update={"info": info})
 
     assets = update_asset_at(project.assets, target, updater)
+    project = project.model_copy(update={"assets": assets})
+
+    # Keep event logs in sync across frames that share a Date_Era so edits made
+    # on one frame propagate everywhere and export the same way.
+    if (
+        project.displaySettings.syncEventLogsByDate
+        and patch.get("description") is not None
+    ):
+        project = _propagate_description_for_target(project, target)
+    return project
+
+
+def _propagate_description_for_target(
+    project: ProjectBody, target: AssetTarget
+) -> ProjectBody:
+    edited = get_asset_state(project.assets, target.filename, target.copyIndex)
+    date_title = edited.info.dateTitle.strip()
+    if not date_title:
+        return project
+    description = edited.info.description
+
+    assets = {k: list(v) for k, v in project.assets.items()}
+    for entry in project.timeline:
+        if entry.filename == target.filename and entry.copyIndex == target.copyIndex:
+            continue
+        frame_state = get_asset_state(assets, entry.filename, entry.copyIndex)
+        if frame_state.info.dateTitle.strip() != date_title:
+            continue
+        if frame_state.info.description == description:
+            continue
+        updated = frame_state.model_copy(
+            update={"info": frame_state.info.model_copy(update={"description": description})}
+        )
+        copies = list(assets.get(entry.filename, []))
+        while len(copies) <= entry.copyIndex:
+            copies.append(create_empty_asset_state())
+        copies[entry.copyIndex] = updated
+        assets[entry.filename] = copies
     return project.model_copy(update={"assets": assets})

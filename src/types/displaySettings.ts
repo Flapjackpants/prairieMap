@@ -7,6 +7,7 @@ export interface ProjectDisplaySettings {
   territoryBorderWidth: number;
   cityMarkerStrokeWidth: number;
   territoryDisplayMode: TerritoryDisplayMode;
+  syncEventLogsByDate: boolean;
 }
 
 export const DISPLAY_SETTINGS_LIMITS = {
@@ -20,6 +21,7 @@ export const DEFAULT_DISPLAY_SETTINGS: ProjectDisplaySettings = {
   territoryBorderWidth: TERRITORY_OUTLINE_WIDTH,
   cityMarkerStrokeWidth: 1.5,
   territoryDisplayMode: 'color',
+  syncEventLogsByDate: false,
 };
 
 export function clampDisplaySettings(
@@ -52,5 +54,6 @@ export function clampDisplaySettings(
     ),
     territoryDisplayMode:
       raw?.territoryDisplayMode === 'flag' ? 'flag' : DEFAULT_DISPLAY_SETTINGS.territoryDisplayMode,
+    syncEventLogsByDate: Boolean(raw?.syncEventLogsByDate),
   };
 }

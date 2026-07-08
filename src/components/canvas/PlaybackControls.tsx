@@ -96,6 +96,7 @@ export function PlaybackControls() {
         <AutoDateModal
           frameCount={timeline.length}
           initialDateTitle={currentFrame?.frameData.info.dateTitle}
+          initialSyncEventLog={state.displaySettings.syncEventLogsByDate}
           onConfirm={(config) => {
             void autoFillTimelineDates(config).finally(() => setShowAutoDateModal(false));
           }}

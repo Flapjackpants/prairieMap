@@ -119,6 +119,7 @@ class ProjectDisplaySettings(BaseModel):
     territoryBorderWidth: float = 1.5
     cityMarkerStrokeWidth: float = 1.5
     territoryDisplayMode: Literal["color", "flag"] = "color"
+    syncEventLogsByDate: bool = False
 
 
 class ProjectBody(BaseModel):
@@ -201,6 +202,11 @@ class AutoFillTimelineDatesRequest(BaseModel):
     startAt: str
     framesPerStep: int = 6
     minutesPerStep: int = 1
+    syncEventLog: bool = False
+
+
+class SyncEventLogsRequest(BaseModel):
+    project: ProjectBody
 
 
 class UpdateFactionMetadataRequest(BaseModel):

@@ -11,11 +11,13 @@ export interface AutoDateModalConfig {
   startAt: Date;
   framesPerStep: number;
   minutesPerStep: number;
+  syncEventLog: boolean;
 }
 
 interface AutoDateModalProps {
   frameCount: number;
   initialDateTitle?: string;
+  initialSyncEventLog?: boolean;
   onConfirm: (config: AutoDateModalConfig) => void;
   onClose: () => void;
 }
@@ -23,6 +25,7 @@ interface AutoDateModalProps {
 export function AutoDateModal({
   frameCount,
   initialDateTitle,
+  initialSyncEventLog = false,
   onConfirm,
   onClose,
 }: AutoDateModalProps) {
@@ -34,6 +37,7 @@ export function AutoDateModal({
   const [startValue, setStartValue] = useState(() => toDatetimeLocalValue(defaultStart));
   const [framesPerStep, setFramesPerStep] = useState(6);
   const [minutesPerStep, setMinutesPerStep] = useState(1);
+  const [syncEventLog, setSyncEventLog] = useState(initialSyncEventLog);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -56,7 +60,7 @@ export function AutoDateModal({
   const handleApply = () => {
     if (!startAt) return;
     if (framesPerStep < 1 || minutesPerStep < 0) return;
-    onConfirm({ startAt, framesPerStep, minutesPerStep });
+    onConfirm({ startAt, framesPerStep, minutesPerStep, syncEventLog });
   };
 
   return (
@@ -106,6 +110,22 @@ export function AutoDateModal({
               />
             </label>
           </div>
+          <label className="flex items-start gap-2 rounded border border-border bg-surface/80 p-2">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={syncEventLog}
+              onChange={(e) => setSyncEventLog(e.target.checked)}
+            />
+            <span className="font-mono text-[9px] leading-snug text-text-muted">
+              <span className="tracking-widest text-accent-cyan uppercase">
+                Sync event log every minute
+              </span>
+              <br />
+              Frames that share the same date/time get the same Event Log, copied from the
+              first frame of each minute.
+            </span>
+          </label>
           {preview.length > 0 && (
             <div className="rounded border border-border bg-surface/80 p-2">
               <p className="mb-1 font-mono text-[8px] tracking-widest text-accent-cyan uppercase">
