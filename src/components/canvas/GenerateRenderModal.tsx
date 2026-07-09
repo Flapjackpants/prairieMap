@@ -1,7 +1,9 @@
 import { Camera, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useProject } from '../../context/ProjectContext';
-import type { FrameRenderOptions } from '../../types/renderOptions';
+import { RenderLayoutSection } from '../settings/RenderLayoutSection';
+import { RenderPreviewPanel } from './RenderPreviewPanel';
+import type { FrameRenderOptions, RenderLayoutOptions } from '../../types/renderOptions';
 import { defaultFrameRenderOptions } from '../../types/renderOptions';
 
 interface GenerateRenderModalProps {
@@ -44,9 +46,13 @@ export function GenerateRenderModal({
 }: GenerateRenderModalProps) {
   const { state, currentFrame } = useProject();
   const countries = currentFrame?.frameData.annotations.countries ?? [];
+  const hasDossierContent = Boolean(
+    currentFrame?.frameData.info.dateTitle.trim() ||
+      currentFrame?.frameData.info.description.trim(),
+  );
   const defaults = useMemo(
-    () => defaultFrameRenderOptions(state.displaySettings),
-    [state.displaySettings],
+    () => defaultFrameRenderOptions(state.displaySettings, hasDossierContent),
+    [state.displaySettings, hasDossierContent],
   );
 
   const [showBackground, setShowBackground] = useState(defaults.showBackground);
@@ -57,6 +63,8 @@ export function GenerateRenderModal({
   const [showCities, setShowCities] = useState(defaults.showCities);
   const [showDivisions, setShowDivisions] = useState(defaults.showDivisions);
   const [showDossier, setShowDossier] = useState(defaults.showDossier);
+  const [showActiveDivisions, setShowActiveDivisions] = useState(defaults.showActiveDivisions);
+  const [layout, setLayout] = useState<RenderLayoutOptions>(defaults.layout);
   const [visibleCountryIds, setVisibleCountryIds] = useState<Set<string>>(
     () => new Set(countries.map((c) => c.id)),
   );
@@ -85,17 +93,35 @@ export function GenerateRenderModal({
   };
 
   const handleRender = () => {
-    onRender({
+    onRender(previewOptions);
+  };
+
+  const previewOptions = useMemo(
+    (): FrameRenderOptions => ({
       showBackground,
       showLabels,
       territoryDisplayMode,
       showCities,
       showDivisions,
       showDossier,
+      showActiveDivisions,
+      layout,
       visibleCountryIds:
         visibleCountryIds.size === countries.length ? null : [...visibleCountryIds],
-    });
-  };
+    }),
+    [
+      showBackground,
+      showLabels,
+      territoryDisplayMode,
+      showCities,
+      showDivisions,
+      showDossier,
+      showActiveDivisions,
+      layout,
+      visibleCountryIds,
+      countries.length,
+    ],
+  );
 
   return (
     <div
@@ -106,8 +132,8 @@ export function GenerateRenderModal({
         if (e.target === e.currentTarget && !isRendering) onClose();
       }}
     >
-      <div className="panel w-full max-w-md">
-        <div className="panel-header">
+      <div className="panel flex max-h-[90vh] w-full max-w-5xl flex-col">
+        <div className="panel-header shrink-0">
           <Camera className="h-3.5 w-3.5 text-accent-cyan" />
           <span className="panel-title">[[ Generate_Render ]]</span>
           <button
@@ -120,7 +146,12 @@ export function GenerateRenderModal({
           </button>
         </div>
 
-        <div className="max-h-[60vh] space-y-4 overflow-y-auto p-4">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
+          <div className="h-[280px] shrink-0 lg:h-auto lg:w-[min(440px,42%)]">
+            <RenderPreviewPanel renderOptions={previewOptions} disabled={isRendering} />
+          </div>
+
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
           <div className="space-y-2 border border-border/60 p-3">
             <p className="font-mono text-[9px] tracking-widest text-text-muted uppercase">Layers</p>
             <ToggleRow label="Background" checked={showBackground} onChange={setShowBackground} />
@@ -132,7 +163,18 @@ export function GenerateRenderModal({
             <ToggleRow label="Settlements" checked={showCities} onChange={setShowCities} />
             <ToggleRow label="Divisions" checked={showDivisions} onChange={setShowDivisions} />
             <ToggleRow label="Dossier panel" checked={showDossier} onChange={setShowDossier} />
+            <p className="font-mono text-[8px] leading-snug tracking-wide text-text-muted">
+              Date/Era, Event Log, and Active Divisions appear in the right-side panel when enabled.
+            </p>
           </div>
+
+          <RenderLayoutSection
+            layout={layout}
+            showActiveDivisions={showActiveDivisions}
+            disabled={isRendering}
+            onLayoutChange={setLayout}
+            onShowActiveDivisionsChange={setShowActiveDivisions}
+          />
 
           <div className="space-y-2 border border-border/60 p-3">
             <p className="font-mono text-[9px] tracking-widest text-text-muted uppercase">
@@ -188,9 +230,10 @@ export function GenerateRenderModal({
           {error && (
             <p className="font-mono text-xs text-accent-crimson">{error}</p>
           )}
+          </div>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border p-4">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border p-4">
           <button type="button" className="btn-secondary" disabled={isRendering} onClick={onClose}>
             Cancel
           </button>

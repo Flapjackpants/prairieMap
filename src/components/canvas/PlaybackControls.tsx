@@ -47,7 +47,11 @@ export function PlaybackControls() {
 
   return (
     <>
-      <ExportFrameStage snapshot={video.snapshot} stageRef={video.stageRef} />
+      <ExportFrameStage
+        snapshot={video.snapshot}
+        renderOptions={video.renderOptions}
+        stageRef={video.stageRef}
+      />
       {frameRender.snapshot && frameRender.renderOptions && (
         <div className="pointer-events-none fixed -left-[10000px] top-0 opacity-0" aria-hidden>
           <MapRenderStage
@@ -66,8 +70,8 @@ export function PlaybackControls() {
           captureLabel={video.captureLabel}
           error={video.error}
           saveMessage={video.saveMessage}
-          onConfirm={(seconds, divisionMotionFps) => {
-            void video.runExport(seconds, divisionMotionFps);
+          onConfirm={(options, seconds, divisionMotionFps) => {
+            void video.runExport(options, seconds, divisionMotionFps);
           }}
           onSave={() => void video.savePendingVideo()}
           onCancel={() => {

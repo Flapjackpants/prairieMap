@@ -82,6 +82,7 @@ class FrameAnnotations(BaseModel):
     countries: list[CountryTerritory] = Field(default_factory=list)
     cities: list[CityMarker] = Field(default_factory=list)
     divisions: list[DivisionMarker] = Field(default_factory=list)
+    suppressedFactionIds: list[str] = Field(default_factory=list)
 
 
 class FactionStat(BaseModel):

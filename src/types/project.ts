@@ -85,6 +85,7 @@ export interface TerritoryDrawings {
   countries: CountryTerritory[];
   cities?: CityMarker[];
   divisions?: DivisionMarker[];
+  suppressedFactionIds?: string[];
 }
 
 export interface FactionStat {
@@ -104,6 +105,7 @@ export interface FrameAnnotations {
   countries: CountryTerritory[];
   cities: CityMarker[];
   divisions: DivisionMarker[];
+  suppressedFactionIds?: string[];
 }
 
 /** Per-copy editable state stored in assets[filename][copyIndex] */
@@ -247,7 +249,7 @@ export function createEmptyFrameInfo(): FrameInfo {
 }
 
 export function createEmptyAnnotations(): FrameAnnotations {
-  return { countries: [], cities: [], divisions: [] };
+  return { countries: [], cities: [], divisions: [], suppressedFactionIds: [] };
 }
 
 export function createEmptyAssetState(): AssetFrameState {
@@ -265,5 +267,6 @@ export function normalizeAnnotations(annotations: FrameAnnotations): FrameAnnota
       ...d,
       name: d.name ?? '',
     })),
+    suppressedFactionIds: annotations.suppressedFactionIds ?? [],
   };
 }

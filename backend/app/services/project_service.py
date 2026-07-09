@@ -154,10 +154,11 @@ def merge_carried_territories(prev: AssetFrameState, next_state: AssetFrameState
     from app.services.clone import clone_country
 
     existing_factions = {c.factionId for c in next_state.annotations.countries}
+    suppressed = set(next_state.annotations.suppressedFactionIds or [])
     carried = [
         clone_country(c)
         for c in prev.annotations.countries
-        if c.factionId not in existing_factions
+        if c.factionId not in existing_factions and c.factionId not in suppressed
     ]
     return next_state.model_copy(
         update={
@@ -166,6 +167,71 @@ def merge_carried_territories(prev: AssetFrameState, next_state: AssetFrameState
             )
         }
     )
+
+
+def _add_suppressed_factions(
+    state: AssetFrameState, faction_ids: set[str]
+) -> AssetFrameState:
+    if not faction_ids:
+        return state
+    merged = list(set(state.annotations.suppressedFactionIds or []) | faction_ids)
+    return state.model_copy(
+        update={
+            "annotations": state.annotations.model_copy(
+                update={"suppressedFactionIds": merged}
+            )
+        }
+    )
+
+
+def infer_suppressed_factions(project: ProjectBody) -> ProjectBody:
+    """Infer faction suppressions from sparse per-frame territory data (e.g. after JSON import)."""
+    if len(project.timeline) < 2:
+        return project
+
+    assets = {k: list(v) for k, v in project.assets.items()}
+    for index in range(1, len(project.timeline)):
+        prev_entry = project.timeline[index - 1]
+        curr_entry = project.timeline[index]
+        prev = get_asset_state(assets, prev_entry.filename, prev_entry.copyIndex)
+        curr = get_asset_state(assets, curr_entry.filename, curr_entry.copyIndex)
+        prev_factions = {c.factionId for c in prev.annotations.countries}
+        curr_factions = {c.factionId for c in curr.annotations.countries}
+        removed = prev_factions - curr_factions
+        if not removed or not curr.annotations.countries:
+            continue
+        updated = _add_suppressed_factions(curr, removed)
+        target = AssetTarget(filename=curr_entry.filename, copyIndex=curr_entry.copyIndex)
+        assets = update_asset_at(assets, target, lambda _: updated)
+
+    return project.model_copy(update={"assets": assets})
+
+
+def sanitize_suppressed_countries(project: ProjectBody) -> ProjectBody:
+    """Remove countries whose factions were marked suppressed (fixes pre-baked overlap in JSON)."""
+    assets = {k: list(v) for k, v in project.assets.items()}
+    changed = False
+    for filename, copies in assets.items():
+        for index, copy in enumerate(copies):
+            suppressed = set(copy.annotations.suppressedFactionIds or [])
+            if not suppressed:
+                continue
+            countries = [
+                c for c in copy.annotations.countries if c.factionId not in suppressed
+            ]
+            if len(countries) == len(copy.annotations.countries):
+                continue
+            copies[index] = copy.model_copy(
+                update={
+                    "annotations": copy.annotations.model_copy(
+                        update={"countries": countries}
+                    )
+                }
+            )
+            changed = True
+    if not changed:
+        return project
+    return project.model_copy(update={"assets": assets})
 
 
 def add_territory_region(
@@ -177,25 +243,29 @@ def add_territory_region(
     region: PolygonRing,
     target_country_id: str | None = None,
 ) -> ProjectBody:
-    assets = update_asset_at(
-        project.assets,
-        target,
-        lambda s: s.model_copy(
-            update={
-                "annotations": with_countries(
-                    s.annotations,
-                    apply_territory_transfer(
-                        s.annotations.countries,
-                        region,
-                        faction_id,
-                        faction_name,
-                        color,
-                        target_country_id,
-                    ),
-                )
-            }
-        ),
-    )
+    def apply_region(state: AssetFrameState) -> AssetFrameState:
+        before_factions = {c.factionId for c in state.annotations.countries}
+        countries = apply_territory_transfer(
+            state.annotations.countries,
+            region,
+            faction_id,
+            faction_name,
+            color,
+            target_country_id,
+        )
+        removed = before_factions - {c.factionId for c in countries}
+        annotations = state.annotations.model_copy(update={"countries": countries})
+        if removed:
+            annotations = annotations.model_copy(
+                update={
+                    "suppressedFactionIds": list(
+                        set(annotations.suppressedFactionIds or []) | removed
+                    )
+                }
+            )
+        return state.model_copy(update={"annotations": annotations})
+
+    assets = update_asset_at(project.assets, target, apply_region)
     return project.model_copy(update={"assets": assets})
 
 
@@ -502,10 +572,13 @@ def _filter_faction_from_frame(
     next_assets = update_asset_at(
         assets,
         target,
-        lambda s: s.model_copy(
-            update={
-                "annotations": s.annotations.model_copy(update={"countries": filtered})
-            }
+        lambda s: _add_suppressed_factions(
+            s.model_copy(
+                update={
+                    "annotations": s.annotations.model_copy(update={"countries": filtered})
+                }
+            ),
+            {faction_id},
         ),
     )
     return next_assets, True
@@ -519,6 +592,13 @@ def delete_country(
     from_timeline_index: int | None = None,
 ) -> ProjectBody | None:
     if scope == "current_frame":
+        frame_state = get_asset_state(project.assets, target.filename, target.copyIndex)
+        country = next(
+            (c for c in frame_state.annotations.countries if c.id == country_id),
+            None,
+        )
+        if country is None:
+            return None
         assets, changed = _filter_country_from_frame(
             {k: list(v) for k, v in project.assets.items()},
             target,
@@ -526,6 +606,11 @@ def delete_country(
         )
         if not changed:
             return None
+        assets = update_asset_at(
+            assets,
+            target,
+            lambda s: _add_suppressed_factions(s, {country.factionId}),
+        )
         return project.model_copy(update={"assets": assets})
 
     if scope == "current_and_future":

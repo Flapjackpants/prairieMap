@@ -10,6 +10,7 @@ from app.models.project import (
     FactionStat,
     FrameAnnotations,
     FrameInfo,
+    RegionLabelPlacement,
 )
 from app.services.geometry import recompute_country_labels
 PolygonRing = list[list[float]]
@@ -20,13 +21,19 @@ def clone_ring(ring: PolygonRing) -> PolygonRing:
 
 
 def clone_country(country: CountryTerritory) -> CountryTerritory:
+    region_labels = [
+        label.model_copy()
+        if isinstance(label, RegionLabelPlacement)
+        else RegionLabelPlacement.model_validate(label)
+        for label in country.regionLabels
+    ]
     cloned = CountryTerritory(
         id=str(uuid.uuid4()),
         factionId=country.factionId,
         name=country.name,
         color=country.color,
         labelSettings=country.labelSettings.model_copy(),
-        regionLabels=[l.model_copy() for l in country.regionLabels],
+        regionLabels=region_labels,
         regions=[clone_ring(r) for r in country.regions],
     )
     return recompute_country_labels(cloned)
@@ -59,6 +66,7 @@ def clone_annotations(source: FrameAnnotations) -> FrameAnnotations:
             )
             for d in source.divisions
         ],
+        suppressedFactionIds=list(source.suppressedFactionIds or []),
     )
 
 

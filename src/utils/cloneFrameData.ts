@@ -40,6 +40,7 @@ export function cloneAnnotations(source: FrameAnnotations): FrameAnnotations {
     countries: source.countries.map(cloneCountry),
     cities: source.cities.map((c) => ({ ...c, id: uuidv4() })),
     divisions: source.divisions.map((d) => ({ ...d, id: uuidv4(), crop: { ...d.crop } })),
+    suppressedFactionIds: [...(source.suppressedFactionIds ?? [])],
   };
 }
 

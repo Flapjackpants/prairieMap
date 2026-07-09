@@ -7,7 +7,8 @@ import type {
   PaletteColor,
   ProjectDisplaySettings,
 } from '../../types/project';
-import { exportDossierMetrics } from '../../utils/dossierLayout';
+import { groupDivisionsByIcon } from '../../utils/activeDivisions';
+import { exportDossierMetrics, shouldShowDossierPanel } from '../../utils/dossierLayout';
 import { prepareDossierEventLog } from '../../utils/formatEventLogExport';
 import type { FrameRenderOptions } from '../../types/renderOptions';
 import { filterCountriesByVisibility } from '../../types/renderOptions';
@@ -24,6 +25,7 @@ export interface MapRenderSnapshot {
   countries: CountryTerritory[];
   cities: CityMarker[];
   divisions: DivisionMarker[];
+  activeDivisions: DivisionMarker[];
   dateTitle: string;
   eventLog: string;
   palette: PaletteColor[];
@@ -39,32 +41,155 @@ interface MapRenderStageProps {
 }
 
 const DOSSIER_FONT = 'JetBrains Mono, monospace';
+const SECTION_GAP = 8;
+
+function DivisionIconGroupRow({
+  group,
+  x,
+  y,
+  iconSize,
+  textWidth,
+  fontSize,
+  divisionImages,
+}: {
+  group: ReturnType<typeof groupDivisionsByIcon>[number];
+  x: number;
+  y: number;
+  iconSize: number;
+  textWidth: number;
+  fontSize: number;
+  divisionImages?: Record<string, HTMLImageElement>;
+}) {
+  const image = divisionImages?.[group.representative.sourceFilename] ?? null;
+  const { crop } = group.representative;
+  const label = group.names.length > 0 ? group.names.join(', ') : 'Unknown';
+  const textX = x + iconSize + 6;
+  const textW = Math.max(20, textWidth - iconSize - 6);
+
+  return (
+    <>
+      {image && crop.width > 0 && crop.height > 0 ? (
+        <KonvaImage
+          x={x}
+          y={y}
+          width={iconSize}
+          height={iconSize}
+          image={image}
+          crop={{ x: crop.x, y: crop.y, width: crop.width, height: crop.height }}
+          listening={false}
+        />
+      ) : (
+        <Rect
+          x={x}
+          y={y}
+          width={iconSize}
+          height={iconSize}
+          fill="#2a2a30"
+          stroke="#4a4a52"
+          strokeWidth={1}
+          listening={false}
+        />
+      )}
+      <Text
+        x={textX}
+        y={y + 2}
+        width={textW}
+        text={label}
+        fontSize={fontSize}
+        lineHeight={1.25}
+        fill="#c8cad0"
+        fontFamily={DOSSIER_FONT}
+        wrap="word"
+        listening={false}
+      />
+    </>
+  );
+}
 
 export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderStageProps) {
   const dateLabel = snapshot.dateTitle.trim();
-  const dossier = exportDossierMetrics(snapshot.width, snapshot.height);
+  const dossier = exportDossierMetrics(snapshot.width, snapshot.height, renderOptions.layout);
   const eventBody = prepareDossierEventLog(snapshot.eventLog, dossier.charsPerLine);
-  const hasDossierContent = Boolean(dateLabel || eventBody);
-  const panelW =
-    renderOptions.showDossier && hasDossierContent ? dossier.panelW : 0;
+  const iconGroups =
+    renderOptions.showActiveDivisions && renderOptions.showDossier
+      ? groupDivisionsByIcon(snapshot.activeDivisions)
+      : [];
+  const hasActiveDivisions = iconGroups.length > 0;
+  const showPanel = shouldShowDossierPanel(
+    renderOptions.showDossier,
+    dateLabel,
+    eventBody,
+    hasActiveDivisions ? iconGroups.length : 0,
+  );
+  const panelW = showPanel ? dossier.panelW : 0;
   const mapAreaW = snapshot.width - panelW;
   const panelX = mapAreaW;
 
-  const scale = Math.min(
+  const baseScale = Math.min(
     mapAreaW / snapshot.mapWidth,
     snapshot.height / snapshot.mapHeight,
   );
+  const scale = baseScale * renderOptions.layout.mapScale;
   const offsetX = (mapAreaW - snapshot.mapWidth * scale) / 2;
   const offsetY = (snapshot.height - snapshot.mapHeight * scale) / 2;
 
   const textWidth = panelW - dossier.padding * 2;
-  let cursorY = dossier.padding;
-  const dateBoxY = cursorY;
-  if (dateLabel) {
-    cursorY += dossier.dateFontSize + dossier.padding + 8;
+  const rowFontSize = Math.max(8, dossier.bodyFontSize - 1);
+  const rowHeight = dossier.activeDivisionsIconSize + 6;
+
+  let activeDivSectionH = 0;
+  if (hasActiveDivisions) {
+    activeDivSectionH =
+      dossier.headerFontSize + SECTION_GAP + iconGroups.length * rowHeight + dossier.padding;
   }
-  const eventHeaderY = dateLabel ? cursorY : dossier.padding;
-  const eventBodyY = eventHeaderY + (eventBody ? dossier.headerFontSize + 8 : 0);
+
+  let dateSectionH = 0;
+  if (dateLabel) {
+    dateSectionH =
+      dossier.headerFontSize + SECTION_GAP + dossier.dateFontSize + dossier.padding + SECTION_GAP;
+  }
+
+  const eventHeaderH = eventBody ? dossier.headerFontSize + SECTION_GAP : 0;
+  const topFixed = dossier.padding + dateSectionH + eventHeaderH;
+  const eventBodyH = eventBody
+    ? Math.max(48, snapshot.height - topFixed - activeDivSectionH - dossier.padding)
+    : 0;
+
+  let cursorY = dossier.padding;
+  const dateHeaderY = dateLabel ? cursorY : 0;
+  if (dateLabel) {
+    cursorY += dossier.headerFontSize + SECTION_GAP;
+  }
+  const dateBoxY = dateLabel ? cursorY : 0;
+  if (dateLabel) {
+    cursorY += dossier.dateFontSize + dossier.padding + SECTION_GAP;
+  }
+
+  const eventHeaderY = eventBody ? cursorY : 0;
+  if (eventBody) {
+    cursorY += eventHeaderH;
+  }
+  const eventBodyY = eventBody ? cursorY : 0;
+  if (eventBody) {
+    cursorY += eventBodyH + SECTION_GAP;
+  }
+
+  const activeDivHeaderY = hasActiveDivisions ? cursorY : 0;
+  if (hasActiveDivisions) {
+    cursorY += dossier.headerFontSize + SECTION_GAP;
+  }
+
+  const maxVisibleGroups = hasActiveDivisions
+    ? Math.max(
+        0,
+        Math.floor(
+          (snapshot.height - activeDivHeaderY - dossier.headerFontSize - SECTION_GAP - dossier.padding) /
+            rowHeight,
+        ),
+      )
+    : 0;
+  const visibleGroups = iconGroups.slice(0, maxVisibleGroups);
+  const truncatedGroupCount = iconGroups.length - visibleGroups.length;
 
   const countries = filterCountriesByVisibility(
     snapshot.countries,
@@ -166,31 +291,43 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
               opacity={0.35}
               listening={false}
             />
+
             {dateLabel && (
-              <Rect
-                x={panelX + dossier.padding}
-                y={dateBoxY}
-                width={textWidth}
-                height={dossier.dateFontSize + dossier.padding}
-                stroke="rgba(0,229,255,0.35)"
-                strokeWidth={1}
-                listening={false}
-              />
+              <>
+                <Text
+                  x={panelX + dossier.padding}
+                  y={dateHeaderY}
+                  text=":: DATE_ERA ::"
+                  fontSize={dossier.headerFontSize}
+                  fill="#6b6f78"
+                  fontFamily={DOSSIER_FONT}
+                  letterSpacing={1}
+                  listening={false}
+                />
+                <Rect
+                  x={panelX + dossier.padding}
+                  y={dateBoxY}
+                  width={textWidth}
+                  height={dossier.dateFontSize + dossier.padding}
+                  stroke="rgba(0,229,255,0.35)"
+                  strokeWidth={1}
+                  listening={false}
+                />
+                <Text
+                  x={panelX + dossier.padding + 6}
+                  y={dateBoxY + 5}
+                  width={textWidth - 12}
+                  text={dateLabel}
+                  fontSize={dossier.dateFontSize}
+                  fill="#e8eaed"
+                  fontStyle="bold"
+                  fontFamily={DOSSIER_FONT}
+                  wrap="word"
+                  listening={false}
+                />
+              </>
             )}
-            {dateLabel && (
-              <Text
-                x={panelX + dossier.padding + 6}
-                y={dateBoxY + 5}
-                width={textWidth - 12}
-                text={dateLabel}
-                fontSize={dossier.dateFontSize}
-                fill="#e8eaed"
-                fontStyle="bold"
-                fontFamily={DOSSIER_FONT}
-                wrap="word"
-                listening={false}
-              />
-            )}
+
             {eventBody && (
               <>
                 <Text
@@ -207,10 +344,7 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
                   x={panelX + dossier.padding}
                   y={eventBodyY - 4}
                   width={textWidth}
-                  height={Math.max(
-                    48,
-                    snapshot.height - eventBodyY - dossier.padding,
-                  )}
+                  height={eventBodyH}
                   stroke="rgba(0,229,255,0.22)"
                   strokeWidth={1}
                   fill="rgba(0,229,255,0.03)"
@@ -220,7 +354,7 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
                   x={panelX + dossier.padding + 6}
                   y={eventBodyY + 2}
                   width={textWidth - 12}
-                  height={snapshot.height - eventBodyY - dossier.padding - 8}
+                  height={eventBodyH - 8}
                   text={eventBody}
                   fontSize={dossier.bodyFontSize}
                   lineHeight={dossier.lineHeight}
@@ -229,6 +363,49 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
                   wrap="word"
                   listening={false}
                 />
+              </>
+            )}
+
+            {hasActiveDivisions && (
+              <>
+                <Text
+                  x={panelX + dossier.padding}
+                  y={activeDivHeaderY}
+                  text=":: ACTIVE_DIVISIONS ::"
+                  fontSize={dossier.headerFontSize}
+                  fill="#6b6f78"
+                  fontFamily={DOSSIER_FONT}
+                  letterSpacing={1}
+                  listening={false}
+                />
+                {visibleGroups.map((group, index) => (
+                  <DivisionIconGroupRow
+                    key={group.key}
+                    group={group}
+                    x={panelX + dossier.padding}
+                    y={activeDivHeaderY + dossier.headerFontSize + SECTION_GAP + index * rowHeight}
+                    iconSize={dossier.activeDivisionsIconSize}
+                    textWidth={textWidth}
+                    fontSize={rowFontSize}
+                    divisionImages={snapshot.divisionImages}
+                  />
+                ))}
+                {truncatedGroupCount > 0 && (
+                  <Text
+                    x={panelX + dossier.padding}
+                    y={
+                      activeDivHeaderY +
+                      dossier.headerFontSize +
+                      SECTION_GAP +
+                      visibleGroups.length * rowHeight
+                    }
+                    text={`… ${truncatedGroupCount} more`}
+                    fontSize={rowFontSize}
+                    fill="#6b6f78"
+                    fontFamily={DOSSIER_FONT}
+                    listening={false}
+                  />
+                )}
               </>
             )}
           </>

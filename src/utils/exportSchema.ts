@@ -42,6 +42,7 @@ function assetStateToExport(state: AssetFrameState): ProjectExportV2['assets'][s
       countries: state.annotations.countries,
       cities: state.annotations.cities,
       divisions: state.annotations.divisions,
+      suppressedFactionIds: state.annotations.suppressedFactionIds ?? [],
     },
     infoBoard: {
       date: state.info.dateTitle,
@@ -58,6 +59,7 @@ function normalizeDrawings(drawings: TerritoryDrawings | LegacyDrawingsExport): 
       countries: territoryDrawings.countries.map(normalizeCountry),
       cities: territoryDrawings.cities ?? [],
       divisions: territoryDrawings.divisions ?? [],
+      suppressedFactionIds: territoryDrawings.suppressedFactionIds ?? [],
     };
   }
   return createEmptyAnnotations();

@@ -46,6 +46,7 @@ def asset_state_to_export(state: AssetFrameState) -> dict[str, Any]:
             "countries": [c.model_dump() for c in state.annotations.countries],
             "cities": [m.model_dump() for m in state.annotations.cities],
             "divisions": [m.model_dump() for m in state.annotations.divisions],
+            "suppressedFactionIds": list(state.annotations.suppressedFactionIds or []),
         },
         "infoBoard": {
             "date": state.info.dateTitle,
@@ -68,6 +69,7 @@ def normalize_drawings(drawings: dict[str, Any]) -> FrameAnnotations:
             divisions=[DivisionMarker.model_validate(m) for m in divisions_raw]
             if isinstance(divisions_raw, list)
             else [],
+            suppressedFactionIds=list(drawings.get("suppressedFactionIds") or []),
         )
     return create_empty_annotations()
 
@@ -128,12 +130,14 @@ def migrate_v1_to_assets(data: dict[str, Any]) -> tuple[dict[str, list[AssetFram
 
 
 def import_to_project(data: dict[str, Any]) -> ProjectBody:
+    from app.services.project_service import infer_suppressed_factions, sanitize_suppressed_countries
+
     version = data.get("version")
     if version == 2:
         assets: dict[str, list[AssetFrameState]] = {}
         for filename, copies in (data.get("assets") or {}).items():
             assets[filename] = [export_to_asset_state(c) for c in copies]
-        return ProjectBody(
+        project = ProjectBody(
             projectName=data.get("projectName") or "Imported Project",
             assets=assets,
             timeline=[TimelineEntry.model_validate(t) for t in data.get("timeline") or []],
@@ -144,15 +148,18 @@ def import_to_project(data: dict[str, Any]) -> ProjectBody:
             ),
             currentTimelineIndex=0,
         )
-    assets, timeline = migrate_v1_to_assets(data)
-    return ProjectBody(
-        projectName="Imported Project",
-        assets=assets,
-        timeline=timeline,
-        palette=[PaletteColor.model_validate(p) for p in data.get("palette") or []],
-        carryOverLabels=data.get("carryOverLabels", True),
-        currentTimelineIndex=0,
-    )
+    else:
+        assets, timeline = migrate_v1_to_assets(data)
+        project = ProjectBody(
+            projectName="Imported Project",
+            assets=assets,
+            timeline=timeline,
+            palette=[PaletteColor.model_validate(p) for p in data.get("palette") or []],
+            carryOverLabels=data.get("carryOverLabels", True),
+            currentTimelineIndex=0,
+        )
+    project = infer_suppressed_factions(project)
+    return sanitize_suppressed_countries(project)
 
 
 def create_initial_assets_from_files(filenames: list[str]) -> dict[str, list[AssetFrameState]]:
