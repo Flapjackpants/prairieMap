@@ -8,7 +8,7 @@ import {
   preloadFlagImages,
 } from './exportCapture';
 import { acquire } from './mapImageCache';
-import { computeActiveDivisions, groupDivisionsByIcon } from './activeDivisions';
+import { computeActiveDivisions } from './activeDivisions';
 import { exportDossierMetrics, shouldShowDossierPanel } from './dossierLayout';
 import { prepareDossierEventLog } from './formatEventLogExport';
 import { resolveTimelineEntry } from './projectHelpers';
@@ -112,9 +112,7 @@ export function buildRenderSnapshot(
   if (!resolved || resolved.isMissing) return null;
 
   const activeDivisions = computeActiveDivisions(state, frameIndex);
-  const activeDivisionCount = renderOptions?.showActiveDivisions
-    ? groupDivisionsByIcon(activeDivisions).length
-    : 0;
+  const activeDivisionCount = renderOptions?.showActiveDivisions ? activeDivisions.length : 0;
 
   const { exportW, exportH } = computeStageDimensionsForRender(
     resolved.canvasWidth,

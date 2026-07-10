@@ -5,7 +5,7 @@ import {
   computeActiveDivisions,
   divisionIconKey,
   divisionsAtFrame,
-  groupDivisionsByIcon,
+  sortDivisionsByIconFile,
 } from './activeDivisions';
 
 function division(id: string, name: string, source = 'icon.png'): DivisionMarker {
@@ -89,7 +89,7 @@ describe('activeDivisions', () => {
     expect(computeActiveDivisions(state, 1).map((d) => d.name)).toEqual(['Bravo']);
   });
 
-  it('groups divisions by icon file and collects names', () => {
+  it('sorts divisions by icon file while keeping one entry per division', () => {
     const sameIcon = division('a', 'First', 'shared.png');
     const sameIconOther = {
       ...division('b', 'Second', 'shared.png'),
@@ -97,12 +97,12 @@ describe('activeDivisions', () => {
     };
     const otherIcon = division('c', 'Third', 'other.png');
 
-    const groups = groupDivisionsByIcon([sameIcon, sameIconOther, otherIcon]);
+    const sorted = sortDivisionsByIconFile([sameIcon, otherIcon, sameIconOther]);
 
-    expect(groups).toHaveLength(2);
-    expect(groups[0].names).toEqual(['First', 'Second']);
-    expect(groups[1].names).toEqual(['Third']);
-    expect(divisionIconKey(sameIcon)).toBe(divisionIconKey(sameIconOther));
-    expect(divisionIconKey(sameIcon)).not.toBe(divisionIconKey(otherIcon));
+    expect(sorted).toHaveLength(3);
+    expect(sorted.map((d) => d.name)).toEqual(['Third', 'First', 'Second']);
+    expect(divisionIconKey(sorted[0])).toBe('other.png');
+    expect(divisionIconKey(sorted[1])).toBe('shared.png');
+    expect(divisionIconKey(sorted[2])).toBe('shared.png');
   });
 });

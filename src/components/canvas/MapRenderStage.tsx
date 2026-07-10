@@ -7,7 +7,7 @@ import type {
   PaletteColor,
   ProjectDisplaySettings,
 } from '../../types/project';
-import { groupDivisionsByIcon } from '../../utils/activeDivisions';
+import { sortDivisionsByIconFile } from '../../utils/activeDivisions';
 import { exportDossierMetrics, shouldShowDossierPanel } from '../../utils/dossierLayout';
 import { prepareDossierEventLog } from '../../utils/formatEventLogExport';
 import type { FrameRenderOptions } from '../../types/renderOptions';
@@ -43,8 +43,8 @@ interface MapRenderStageProps {
 const DOSSIER_FONT = 'JetBrains Mono, monospace';
 const SECTION_GAP = 8;
 
-function DivisionIconGroupRow({
-  group,
+function ActiveDivisionRow({
+  division,
   x,
   y,
   iconSize,
@@ -52,7 +52,7 @@ function DivisionIconGroupRow({
   fontSize,
   divisionImages,
 }: {
-  group: ReturnType<typeof groupDivisionsByIcon>[number];
+  division: DivisionMarker;
   x: number;
   y: number;
   iconSize: number;
@@ -60,9 +60,9 @@ function DivisionIconGroupRow({
   fontSize: number;
   divisionImages?: Record<string, HTMLImageElement>;
 }) {
-  const image = divisionImages?.[group.representative.sourceFilename] ?? null;
-  const { crop } = group.representative;
-  const label = group.names.length > 0 ? group.names.join(', ') : 'Unknown';
+  const image = divisionImages?.[division.sourceFilename] ?? null;
+  const { crop } = division;
+  const label = division.name.trim() || 'Unknown';
   const textX = x + iconSize + 6;
   const textW = Math.max(20, textWidth - iconSize - 6);
 
@@ -110,16 +110,16 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
   const dateLabel = snapshot.dateTitle.trim();
   const dossier = exportDossierMetrics(snapshot.width, snapshot.height, renderOptions.layout);
   const eventBody = prepareDossierEventLog(snapshot.eventLog, dossier.charsPerLine);
-  const iconGroups =
+  const activeDivisions =
     renderOptions.showActiveDivisions && renderOptions.showDossier
-      ? groupDivisionsByIcon(snapshot.activeDivisions)
+      ? sortDivisionsByIconFile(snapshot.activeDivisions)
       : [];
-  const hasActiveDivisions = iconGroups.length > 0;
+  const hasActiveDivisions = activeDivisions.length > 0;
   const showPanel = shouldShowDossierPanel(
     renderOptions.showDossier,
     dateLabel,
     eventBody,
-    hasActiveDivisions ? iconGroups.length : 0,
+    hasActiveDivisions ? activeDivisions.length : 0,
   );
   const panelW = showPanel ? dossier.panelW : 0;
   const mapAreaW = snapshot.width - panelW;
@@ -140,7 +140,7 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
   let activeDivSectionH = 0;
   if (hasActiveDivisions) {
     activeDivSectionH =
-      dossier.headerFontSize + SECTION_GAP + iconGroups.length * rowHeight + dossier.padding;
+      dossier.headerFontSize + SECTION_GAP + activeDivisions.length * rowHeight + dossier.padding;
   }
 
   let dateSectionH = 0;
@@ -179,7 +179,7 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
     cursorY += dossier.headerFontSize + SECTION_GAP;
   }
 
-  const maxVisibleGroups = hasActiveDivisions
+  const maxVisibleDivisions = hasActiveDivisions
     ? Math.max(
         0,
         Math.floor(
@@ -188,8 +188,8 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
         ),
       )
     : 0;
-  const visibleGroups = iconGroups.slice(0, maxVisibleGroups);
-  const truncatedGroupCount = iconGroups.length - visibleGroups.length;
+  const visibleDivisions = activeDivisions.slice(0, maxVisibleDivisions);
+  const truncatedDivisionCount = activeDivisions.length - visibleDivisions.length;
 
   const countries = filterCountriesByVisibility(
     snapshot.countries,
@@ -378,10 +378,10 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
                   letterSpacing={1}
                   listening={false}
                 />
-                {visibleGroups.map((group, index) => (
-                  <DivisionIconGroupRow
-                    key={group.key}
-                    group={group}
+                {visibleDivisions.map((division, index) => (
+                  <ActiveDivisionRow
+                    key={division.id}
+                    division={division}
                     x={panelX + dossier.padding}
                     y={activeDivHeaderY + dossier.headerFontSize + SECTION_GAP + index * rowHeight}
                     iconSize={dossier.activeDivisionsIconSize}
@@ -390,16 +390,16 @@ export function MapRenderStage({ snapshot, renderOptions, stageRef }: MapRenderS
                     divisionImages={snapshot.divisionImages}
                   />
                 ))}
-                {truncatedGroupCount > 0 && (
+                {truncatedDivisionCount > 0 && (
                   <Text
                     x={panelX + dossier.padding}
                     y={
                       activeDivHeaderY +
                       dossier.headerFontSize +
                       SECTION_GAP +
-                      visibleGroups.length * rowHeight
+                      visibleDivisions.length * rowHeight
                     }
-                    text={`… ${truncatedGroupCount} more`}
+                    text={`… ${truncatedDivisionCount} more`}
                     fontSize={rowFontSize}
                     fill="#6b6f78"
                     fontFamily={DOSSIER_FONT}

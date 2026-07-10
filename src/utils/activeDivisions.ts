@@ -18,27 +18,13 @@ export function divisionIconKey(division: DivisionMarker): string {
   return division.sourceFilename;
 }
 
-export interface DivisionIconGroup {
-  key: string;
-  representative: DivisionMarker;
-  names: string[];
-}
-
-export function groupDivisionsByIcon(divisions: DivisionMarker[]): DivisionIconGroup[] {
-  const groups = new Map<string, DivisionIconGroup>();
-
-  for (const division of divisions) {
-    const key = divisionIconKey(division);
-    let group = groups.get(key);
-    if (!group) {
-      group = { key, representative: division, names: [] };
-      groups.set(key, group);
-    }
-    const name = division.name.trim();
-    if (name && !group.names.includes(name)) {
-      group.names.push(name);
-    }
-  }
-
-  return [...groups.values()];
+/** One row per division; same icon file entries are listed consecutively. */
+export function sortDivisionsByIconFile(divisions: DivisionMarker[]): DivisionMarker[] {
+  return divisions
+    .map((division, index) => ({ division, index }))
+    .sort((a, b) => {
+      const iconCompare = divisionIconKey(a.division).localeCompare(divisionIconKey(b.division));
+      return iconCompare !== 0 ? iconCompare : a.index - b.index;
+    })
+    .map(({ division }) => division);
 }
